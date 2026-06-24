@@ -22,7 +22,6 @@ fn run_saya_cli() -> Result<()> {
 
     match cli.command {
         cli::Command::Apply => {
-            privilege::require_root()?;
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;
             commands::apply::run(&manifest, backend.as_ref())

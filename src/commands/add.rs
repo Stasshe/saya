@@ -19,7 +19,6 @@ pub fn run_add(
     manifest.packages.insert(
         args.logical.clone(),
         PackageEntry {
-            sudo: Some(user.used_sudo),
             apt: args.apt.clone(),
             pacman: args.pacman.clone(),
         },
@@ -56,7 +55,6 @@ mod tests {
             uid: unsafe { libc::getuid() },
             gid: unsafe { libc::getgid() },
             home,
-            used_sudo: false,
         }
     }
 
@@ -69,7 +67,6 @@ mod tests {
         manifest.packages.insert(
             "git".to_string(),
             PackageEntry {
-                sudo: Some(true),
                 apt: vec!["git-core".to_string()],
                 pacman: Vec::new(),
             },

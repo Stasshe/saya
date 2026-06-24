@@ -7,17 +7,9 @@ pub struct InvocationUser {
     pub uid: u32,
     pub gid: u32,
     pub home: PathBuf,
-    pub used_sudo: bool,
 }
 
-pub fn require_root() -> Result<()> {
-    if !is_effective_root() {
-        bail!("saya needs root; run with sudo");
-    }
-    Ok(())
-}
-
-pub fn is_effective_root() -> bool {
+fn is_effective_root() -> bool {
     // SAFETY: geteuid takes no arguments and cannot fail.
     (unsafe { libc::geteuid() }) == 0
 }
@@ -28,8 +20,8 @@ pub fn is_effective_root() -> bool {
 /// uid owns the manifest.
 pub fn resolve_invocation_user() -> Result<InvocationUser> {
     match sudo_uid()? {
-        Some(uid) => lookup_passwd_entry(uid, true),
-        None => lookup_passwd_entry(current_uid(), false),
+        Some(uid) => lookup_passwd_entry(uid),
+        None => lookup_passwd_entry(current_uid()),
     }
 }
 
@@ -101,7 +93,7 @@ fn current_uid() -> u32 {
     unsafe { libc::getuid() }
 }
 
-fn lookup_passwd_entry(uid: u32, used_sudo: bool) -> Result<InvocationUser> {
+fn lookup_passwd_entry(uid: u32) -> Result<InvocationUser> {
     let mut buf = vec![0u8; 1024];
     let mut result: libc::passwd = unsafe { std::mem::zeroed() };
     let mut result_ptr: *mut libc::passwd = std::ptr::null_mut();
@@ -146,7 +138,6 @@ fn lookup_passwd_entry(uid: u32, used_sudo: bool) -> Result<InvocationUser> {
         uid: result.pw_uid,
         gid: result.pw_gid,
         home: PathBuf::from(home),
-        used_sudo,
     })
 }
 
@@ -158,7 +149,7 @@ mod tests {
     fn lookup_passwd_entry_resolves_current_uid() {
         // SAFETY: getuid takes no arguments and cannot fail.
         let uid = unsafe { libc::getuid() };
-        let user = lookup_passwd_entry(uid, false).unwrap();
+        let user = lookup_passwd_entry(uid).unwrap();
         assert_eq!(user.uid, uid);
         assert!(!user.home.as_os_str().is_empty());
     }

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendKind;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -20,8 +20,6 @@ pub struct Manifest {
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PackageEntry {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sudo: Option<bool>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apt: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -112,11 +110,10 @@ impl Manifest {
 
     /// Records `real_name` under `logical` for `kind`, creating the entry if needed.
     /// No-op if already recorded.
-    pub fn record(&mut self, logical: &str, real_name: &str, kind: BackendKind, used_sudo: bool) {
+    pub fn record(&mut self, logical: &str, real_name: &str, kind: BackendKind) {
         debug_assert!(validate_package_name(logical).is_ok());
         debug_assert!(validate_package_name(real_name).is_ok());
         let entry = self.packages.entry(logical.to_string()).or_default();
-        entry.sudo = Some(used_sudo);
         if logical == real_name {
             // implicit form: leave the per-backend list empty.
             return;
@@ -193,8 +190,8 @@ mod tests {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         let mut manifest = Manifest::default();
-        manifest.record("git", "git", BackendKind::Apt, true);
-        manifest.record("neovim", "neovim", BackendKind::Pacman, false);
+        manifest.record("git", "git", BackendKind::Apt);
+        manifest.record("neovim", "neovim", BackendKind::Pacman);
         manifest.save(&path).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
@@ -211,7 +208,6 @@ mod tests {
     #[test]
     fn resolve_names_uses_explicit_list_when_present() {
         let entry = PackageEntry {
-            sudo: None,
             apt: vec!["neovim".to_string()],
             pacman: vec![],
         };
@@ -228,7 +224,7 @@ mod tests {
     #[test]
     fn find_logical_name_by_real_matches_explicit_list() {
         let mut manifest = Manifest::default();
-        manifest.record("nvim", "neovim", BackendKind::Apt, true);
+        manifest.record("nvim", "neovim", BackendKind::Apt);
         assert_eq!(
             manifest.find_logical_name_by_real("neovim", BackendKind::Apt),
             Some("nvim".to_string())
@@ -242,21 +238,11 @@ mod tests {
     #[test]
     fn find_logical_name_by_real_matches_implicit_logical_name() {
         let mut manifest = Manifest::default();
-        manifest.record("git", "git", BackendKind::Apt, true);
+        manifest.record("git", "git", BackendKind::Apt);
         assert_eq!(
             manifest.find_logical_name_by_real("git", BackendKind::Apt),
             Some("git".to_string())
         );
-    }
-
-    #[test]
-    fn record_stores_sudo_metadata() {
-        let mut manifest = Manifest::default();
-        manifest.record("git", "git", BackendKind::Apt, false);
-        assert_eq!(manifest.packages["git"].sudo, Some(false));
-
-        manifest.record("curl", "curl", BackendKind::Apt, true);
-        assert_eq!(manifest.packages["curl"].sudo, Some(true));
     }
 
     #[test]

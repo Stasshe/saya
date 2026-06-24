@@ -5,8 +5,6 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use crate::privilege::is_effective_root;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
     Apt,
@@ -21,13 +19,9 @@ pub trait Backend {
 }
 
 pub(super) fn package_manager_command(program: &str) -> Command {
-    if is_effective_root() {
-        Command::new(program)
-    } else {
-        let mut command = Command::new("/usr/bin/sudo");
-        command.arg(program);
-        command
-    }
+    let mut command = Command::new("/usr/bin/sudo");
+    command.arg(program);
+    command
 }
 
 /// Picks a backend by reading `ID`/`ID_LIKE` from `/etc/os-release`.

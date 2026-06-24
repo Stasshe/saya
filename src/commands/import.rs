@@ -55,7 +55,7 @@ pub fn run(
             .find_logical_name_by_real(name, backend.kind())
             .is_none()
         {
-            manifest.record(name, name, backend.kind(), user.used_sudo);
+            manifest.record(name, name, backend.kind());
             changed = true;
         }
     }

@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::backend::Backend;
 use crate::cli::InstallArgs;
 use crate::manifest::Manifest;
-use crate::privilege::{InvocationUser, drop_to_user, is_effective_root};
+use crate::privilege::{InvocationUser, drop_to_user};
 
 pub fn run(
     manifest: &mut Manifest,
@@ -16,14 +16,13 @@ pub fn run(
 ) -> Result<()> {
     backend.install(&args.packages)?;
 
-    let used_sudo = user.used_sudo || !is_effective_root();
     let mut changed = false;
     for real_name in &args.packages {
         if manifest
             .find_logical_name_by_real(real_name, backend.kind())
             .is_none()
         {
-            manifest.record(real_name, real_name, backend.kind(), used_sudo);
+            manifest.record(real_name, real_name, backend.kind());
             changed = true;
         }
     }
@@ -87,7 +86,6 @@ mod tests {
             uid: unsafe { libc::getuid() },
             gid: unsafe { libc::getgid() },
             home,
-            used_sudo: false,
         }
     }
 

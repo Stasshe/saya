@@ -5,7 +5,7 @@ OS標準パッケージマネージャ(apt/pacman)の薄いラッパー。chezmo
 - **意図記録**: `saya install foo`でインストールに成功した直接指定パッケージ名だけマニフェストへ記録する。
 - **一方向適用**: マニフェストにあって未インストールのものだけインストール。マニフェストから消えてもアンインストールしない。
 
-マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に保存する。`sudo`経由で記録した場合もrootではなく元ユーザー側に保存し、各エントリに`sudo = true/false`を記録する。
+マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に保存する。`sudo`経由で実行した場合もrootではなく元ユーザー側に保存する。
 
 詳細設計は[SPECIFICATION.md](./SPECIFICATION.md)参照。
 
@@ -26,11 +26,10 @@ cargo install --git https://github.com/Stasshe/saya
 ## 使い方
 
 ```sh
-saya install neovim        # apt/pacmanを内部で呼び出し、成功したら記録する
-sudo saya install git      # sudo経由でも同じく元ユーザーのmanifestへ記録する
+saya install neovim        # apt/pacmanをsudo経由で呼び出し、成功したら記録する
 
 saya status                # マニフェストとインストール状態の差分確認
-sudo saya apply            # マニフェストにあって未インストールのものを入れる
+saya apply                 # マニフェストにあって未インストールのものを入れる
 ```
 
 ## リリース手順(開発者向け)
