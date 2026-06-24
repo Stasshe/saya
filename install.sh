@@ -73,11 +73,8 @@ fi
 tar -xzf "${tmp_dir}/${archive}" -C "$tmp_dir"
 
 bin_path="${tmp_dir}/saya"
-if [ ! -f "$bin_path" ] || [ -L "$bin_path" ]; then
-  bin_path="$(find "$tmp_dir" -type f -name saya | head -1)"
-fi
 if [ -z "${bin_path:-}" ] || [ ! -f "$bin_path" ] || [ -L "$bin_path" ]; then
-  echo "saya binary not found in downloaded archive" >&2
+  echo "downloaded archive must contain a regular ./saya binary" >&2
   exit 1
 fi
 

@@ -7,16 +7,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendKind;
 
-pub const CURRENT_VERSION: u32 = 0;
+pub const CURRENT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct Manifest {
-    pub version: u32,
+    pub schema_version: u32,
     #[serde(default)]
     pub packages: BTreeMap<String, PackageEntry>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct PackageEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sudo: Option<bool>,
@@ -29,7 +31,7 @@ pub struct PackageEntry {
 impl Default for Manifest {
     fn default() -> Self {
         Self {
-            version: CURRENT_VERSION,
+            schema_version: CURRENT_SCHEMA_VERSION,
             packages: BTreeMap::new(),
         }
     }
@@ -126,11 +128,11 @@ impl Manifest {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.version != CURRENT_VERSION {
+        if self.schema_version != CURRENT_SCHEMA_VERSION {
             anyhow::bail!(
-                "unsupported manifest version {}; expected {}",
-                self.version,
-                CURRENT_VERSION
+                "unsupported manifest schema_version {}; expected {}",
+                self.schema_version,
+                CURRENT_SCHEMA_VERSION
             );
         }
 
@@ -261,7 +263,7 @@ mod tests {
     fn load_rejects_unsupported_manifest_version() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
-        std::fs::write(&path, "version = 999\n").unwrap();
+        std::fs::write(&path, "schema_version = 999\n").unwrap();
 
         let err = Manifest::load(&path).unwrap_err().to_string();
         assert!(err.contains("validating manifest"));

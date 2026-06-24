@@ -63,7 +63,7 @@ saya/
 
 ```rust
 pub struct Manifest {
-    pub version: u32,
+    pub schema_version: u32,
     pub packages: BTreeMap<String, PackageEntry>,
 }
 
@@ -74,6 +74,7 @@ pub struct PackageEntry {
 }
 ```
 
+- `schema_version` はマニフェストファイル形式のバージョンで、saya本体のリリースバージョンではない。
 - `git = {}` のように backend 固有名リストが空なら、論理名そのものを実パッケージ名として使う。
 - `sudo` はそのエントリを記録した install が root/sudo を伴ったかを表す。
 - `Manifest::save(path)` は同じディレクトリの `.tmp` へ書いてから rename する。
