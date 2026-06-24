@@ -14,11 +14,22 @@ impl Backend for PacmanBackend {
     }
 
     fn is_installed(&self, real_pkg_name: &str) -> Result<bool> {
-        let status = Command::new("/usr/bin/pacman")
+        let output = Command::new("/usr/bin/pacman")
             .args(["-Q", real_pkg_name])
-            .status()
+            .output()
             .context("running pacman -Q")?;
-        Ok(status.success())
+        if output.status.success() {
+            return Ok(true);
+        }
+        if output.status.code() == Some(1) {
+            return Ok(false);
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        bail!(
+            "pacman -Q failed for {real_pkg_name} with {}: {}",
+            output.status,
+            stderr.trim()
+        );
     }
 
     fn install(&self, real_pkg_names: &[String]) -> Result<()> {

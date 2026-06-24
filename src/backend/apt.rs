@@ -17,8 +17,16 @@ impl Backend for AptBackend {
             .output()
             .context("running dpkg-query")?;
         if !output.status.success() {
-            // dpkg-query exits non-zero when the package is unknown.
-            return Ok(false);
+            if output.status.code() == Some(1) {
+                // dpkg-query exits 1 when the package is unknown.
+                return Ok(false);
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!(
+                "dpkg-query failed for {real_pkg_name} with {}: {}",
+                output.status,
+                stderr.trim()
+            );
         }
         let status = String::from_utf8_lossy(&output.stdout);
         Ok(status.contains("install ok installed"))

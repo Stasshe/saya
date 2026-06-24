@@ -71,8 +71,11 @@ pub fn run(
 fn edit_candidates(candidates: &[String]) -> Result<Vec<String>> {
     let tmp_path = write_candidates_to_tempfile(candidates)?;
 
-    let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
-    let status = Command::new(&editor)
+    let editor = editor_command();
+    let mut command = editor.split_whitespace();
+    let program = command.next().unwrap_or("vi");
+    let status = Command::new(program)
+        .args(command)
         .arg(&tmp_path)
         .status()
         .with_context(|| format!("running editor {editor}"))?;
@@ -131,4 +134,41 @@ fn write_candidates_to_tempfile(candidates: &[String]) -> Result<PathBuf> {
         None => "could not create import tempfile after 100 attempts".to_string(),
     };
     bail!(message)
+}
+
+fn editor_command() -> String {
+    editor_command_from(std::env::var("VISUAL").ok(), std::env::var("EDITOR").ok())
+}
+
+fn editor_command_from(visual: Option<String>, editor: Option<String>) -> String {
+    visual
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| editor.filter(|value| !value.trim().is_empty()))
+        .unwrap_or_else(|| "vi".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editor_command_prefers_visual() {
+        assert_eq!(
+            editor_command_from(Some("code --wait".to_string()), Some("vim".to_string())),
+            "code --wait"
+        );
+    }
+
+    #[test]
+    fn editor_command_falls_back_to_editor() {
+        assert_eq!(
+            editor_command_from(None, Some("vim -f".to_string())),
+            "vim -f"
+        );
+    }
+
+    #[test]
+    fn editor_command_uses_vi_for_empty_env() {
+        assert_eq!(editor_command_from(Some(" ".to_string()), None), "vi");
+    }
 }
