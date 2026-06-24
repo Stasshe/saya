@@ -2,12 +2,12 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::backend::Backend;
 use crate::cli::ImportArgs;
 use crate::manifest::Manifest;
-use crate::privilege::{chown_to_user, OriginalUser};
+use crate::privilege::{OriginalUser, drop_to_user};
 
 pub fn run(
     args: &ImportArgs,
@@ -23,7 +23,11 @@ pub fn run(
     let candidates: Vec<String> = backend
         .list_manually_installed()?
         .into_iter()
-        .filter(|name| manifest.find_logical_name_by_real(name, backend.kind()).is_none())
+        .filter(|name| {
+            manifest
+                .find_logical_name_by_real(name, backend.kind())
+                .is_none()
+        })
         .collect();
 
     if candidates.is_empty() {
@@ -39,17 +43,20 @@ pub fn run(
         return Ok(());
     }
 
+    drop_to_user(user)?;
     let selected = edit_candidates(&candidates)?;
     let mut changed = false;
     for name in &selected {
-        if manifest.find_logical_name_by_real(name, backend.kind()).is_none() {
-            manifest.record(name, name, backend.kind());
+        if manifest
+            .find_logical_name_by_real(name, backend.kind())
+            .is_none()
+        {
+            manifest.record(name, name, backend.kind(), user.used_sudo);
             changed = true;
         }
     }
     if changed {
         manifest.save(path)?;
-        chown_to_user(path, user)?;
     }
     println!("imported {} package(s)", selected.len());
     Ok(())
@@ -71,8 +78,8 @@ fn edit_candidates(candidates: &[String]) -> Result<Vec<String>> {
         bail!("editor exited with {status}");
     }
 
-    let text = fs::read_to_string(&tmp_path)
-        .with_context(|| format!("reading {}", tmp_path.display()))?;
+    let text =
+        fs::read_to_string(&tmp_path).with_context(|| format!("reading {}", tmp_path.display()))?;
     let _ = fs::remove_file(&tmp_path);
     Ok(text
         .lines()

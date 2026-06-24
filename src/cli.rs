@@ -1,7 +1,10 @@
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "saya", about = "Thin one-way sync wrapper around your OS package manager")]
+#[command(
+    name = "saya",
+    about = "Thin one-way sync wrapper around your OS package manager"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,

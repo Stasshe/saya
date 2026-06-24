@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::backend::BackendKind;
 use crate::commands::manifest_path;
 use crate::manifest::Manifest;
-use crate::privilege::{chown_to_user, resolve_original_user};
+use crate::privilege::{drop_to_user, resolve_original_user};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShimKind {
@@ -66,15 +66,18 @@ fn record_targets(kind: BackendKind, targets: &[String]) -> Result<()> {
 
     let mut changed = false;
     for real_name in targets {
-        if manifest.find_logical_name_by_real(real_name, kind).is_none() {
-            manifest.record(real_name, real_name, kind);
+        if manifest
+            .find_logical_name_by_real(real_name, kind)
+            .is_none()
+        {
+            manifest.record(real_name, real_name, kind, user.used_sudo);
             changed = true;
         }
     }
 
     if changed {
+        drop_to_user(&user)?;
         manifest.save(&path)?;
-        chown_to_user(&path, &user)?;
     }
     Ok(())
 }
@@ -108,7 +111,11 @@ fn is_plain_apt_package_name(s: &str) -> bool {
 }
 
 fn parse_pacman_install_targets(args: &[String]) -> Vec<String> {
-    let positionals: Vec<String> = args.iter().filter(|a| !a.starts_with('-')).cloned().collect();
+    let positionals: Vec<String> = args
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .cloned()
+        .collect();
     if positionals.is_empty() {
         return Vec::new();
     }
@@ -118,8 +125,12 @@ fn parse_pacman_install_targets(args: &[String]) -> Vec<String> {
         .filter(|a| a.starts_with('-'))
         .map(String::as_str)
         .collect();
-    let has_remove = flags.iter().any(|f| f.starts_with("-R") || *f == "--remove");
-    let has_sync = flags.iter().any(|f| f.starts_with("-S") && !f.contains('c'));
+    let has_remove = flags
+        .iter()
+        .any(|f| f.starts_with("-R") || *f == "--remove");
+    let has_sync = flags
+        .iter()
+        .any(|f| f.starts_with("-S") && !f.contains('c'));
     if has_remove || !has_sync {
         return Vec::new();
     }
@@ -162,8 +173,10 @@ mod tests {
 
     #[test]
     fn apt_install_excludes_url() {
-        let targets =
-            parse_install_targets(BackendKind::Apt, &args(&["install", "https://example.com/x.deb"]));
+        let targets = parse_install_targets(
+            BackendKind::Apt,
+            &args(&["install", "https://example.com/x.deb"]),
+        );
         assert!(targets.is_empty());
     }
 

@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::cli::AddArgs;
 use crate::manifest::{Manifest, PackageEntry};
-use crate::privilege::{chown_to_user, OriginalUser};
+use crate::privilege::{OriginalUser, drop_to_user};
 
 pub fn run_add(
     manifest: &mut Manifest,
@@ -15,12 +15,13 @@ pub fn run_add(
     manifest.packages.insert(
         args.logical.clone(),
         PackageEntry {
+            sudo: Some(user.used_sudo),
             apt: args.apt.clone(),
             pacman: args.pacman.clone(),
         },
     );
+    drop_to_user(user)?;
     manifest.save(path)?;
-    chown_to_user(path, user)?;
     println!("added: {}", args.logical);
     Ok(())
 }
@@ -35,8 +36,8 @@ pub fn run_forget(
         println!("not in manifest: {logical}");
         return Ok(());
     }
+    drop_to_user(user)?;
     manifest.save(path)?;
-    chown_to_user(path, user)?;
     println!("forgot: {logical}");
     Ok(())
 }

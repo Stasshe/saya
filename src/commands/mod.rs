@@ -20,7 +20,10 @@ pub struct PackageStatus {
     pub installed: bool,
 }
 
-pub fn compute_status(manifest: &Manifest, backend: &dyn Backend) -> anyhow::Result<Vec<PackageStatus>> {
+pub fn compute_status(
+    manifest: &Manifest,
+    backend: &dyn Backend,
+) -> anyhow::Result<Vec<PackageStatus>> {
     let mut result = Vec::new();
     for (logical, entry) in &manifest.packages {
         for real_name in entry.resolve_names(logical, backend.kind()) {

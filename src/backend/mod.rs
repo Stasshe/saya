@@ -1,7 +1,7 @@
 mod apt;
 mod pacman;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
@@ -18,8 +18,7 @@ pub trait Backend {
 
 /// Picks a backend by reading `ID`/`ID_LIKE` from `/etc/os-release`.
 pub fn detect_backend() -> Result<Box<dyn Backend>> {
-    let text = std::fs::read_to_string("/etc/os-release")
-        .context("reading /etc/os-release")?;
+    let text = std::fs::read_to_string("/etc/os-release").context("reading /etc/os-release")?;
     detect_backend_from_os_release(&text)
 }
 

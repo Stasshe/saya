@@ -37,12 +37,12 @@ fn main() {
 fn run_saya_cli() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    privilege::require_root()?;
     let user = privilege::resolve_original_user()?;
     let path = commands::manifest_path(&user.home);
 
     match cli.command {
         cli::Command::Apply => {
+            privilege::require_root()?;
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;
             commands::apply::run(&manifest, backend.as_ref())
@@ -66,8 +66,14 @@ fn run_saya_cli() -> Result<()> {
             commands::import::run(&args, &mut manifest, backend.as_ref(), &path, &user)
         }
         cli::Command::Capture(args) => match args.action {
-            cli::CaptureAction::Enable => capture::enable(),
-            cli::CaptureAction::Disable => capture::disable(),
+            cli::CaptureAction::Enable => {
+                privilege::require_root()?;
+                capture::enable()
+            }
+            cli::CaptureAction::Disable => {
+                privilege::require_root()?;
+                capture::disable()
+            }
         },
         cli::Command::Doctor => {
             let report = capture::doctor()?;
@@ -83,7 +89,11 @@ fn print_doctor_report(report: &capture::DoctorReport) {
             "{:<10} symlink={} real_binary={}",
             shim.name,
             if shim.symlink_ok { "ok" } else { "MISSING" },
-            if shim.real_binary_exists { "ok" } else { "MISSING" }
+            if shim.real_binary_exists {
+                "ok"
+            } else {
+                "MISSING"
+            }
         );
     }
     println!(

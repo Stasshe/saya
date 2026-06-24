@@ -2,7 +2,7 @@ use std::fs;
 use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 const SHIM_NAMES: &[&str] = &["apt", "apt-get", "pacman"];
 const SHIM_DIR: &str = "/usr/local/bin";
@@ -21,7 +21,11 @@ pub struct DoctorReport {
 
 impl DoctorReport {
     pub fn all_ok(&self) -> bool {
-        self.path_local_bin_first && self.shims.iter().all(|s| s.symlink_ok && s.real_binary_exists)
+        self.path_local_bin_first
+            && self
+                .shims
+                .iter()
+                .all(|s| s.symlink_ok && s.real_binary_exists)
     }
 }
 
@@ -73,7 +77,8 @@ pub fn doctor() -> Result<DoctorReport> {
             real_binary_exists: real_path.exists(),
         });
     }
-    let path_local_bin_first = path_var_has_local_bin_first(&std::env::var("PATH").unwrap_or_default());
+    let path_local_bin_first =
+        path_var_has_local_bin_first(&std::env::var("PATH").unwrap_or_default());
     Ok(DoctorReport {
         shims,
         path_local_bin_first,
