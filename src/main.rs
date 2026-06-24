@@ -21,6 +21,7 @@ fn run_saya_cli() -> Result<()> {
     let path = commands::manifest_path(&user.home);
 
     match cli.command {
+        cli::Command::SelfUpdate => commands::self_update::run(),
         cli::Command::Apply => {
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;

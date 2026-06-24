@@ -14,6 +14,8 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Update this saya binary from the latest GitHub Release.
+    SelfUpdate,
     /// Install every package listed in the manifest that isn't installed yet.
     Apply,
     /// Show which manifest packages are installed/missing without installing.
