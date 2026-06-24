@@ -64,4 +64,4 @@ else
 fi
 
 echo "saya ${VERSION} installed to ${INSTALL_DIR}/saya"
-echo "next: sudo saya capture enable"
+echo "next: saya install <package>"

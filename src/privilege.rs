@@ -11,12 +11,15 @@ pub struct InvocationUser {
 }
 
 pub fn require_root() -> Result<()> {
-    // SAFETY: geteuid takes no arguments and cannot fail.
-    let euid = unsafe { libc::geteuid() };
-    if euid != 0 {
+    if !is_effective_root() {
         bail!("saya needs root; run with sudo");
     }
     Ok(())
+}
+
+pub fn is_effective_root() -> bool {
+    // SAFETY: geteuid takes no arguments and cannot fail.
+    (unsafe { libc::geteuid() }) == 0
 }
 
 /// Resolves the user whose manifest should be read and written.
@@ -78,8 +81,7 @@ pub fn drop_to_user(user: &InvocationUser) -> Result<()> {
 }
 
 fn sudo_uid() -> Result<Option<u32>> {
-    // SAFETY: geteuid takes no arguments and cannot fail.
-    if unsafe { libc::geteuid() } != 0 {
+    if !is_effective_root() {
         return Ok(None);
     }
     let Some(val) = std::env::var_os("SUDO_UID") else {

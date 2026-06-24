@@ -1,6 +1,7 @@
 pub mod add;
 pub mod apply;
 pub mod import;
+pub mod install;
 pub mod status;
 
 use std::path::{Path, PathBuf};

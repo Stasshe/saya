@@ -25,7 +25,7 @@ impl Backend for PacmanBackend {
         if real_pkg_names.is_empty() {
             return Ok(());
         }
-        let status = Command::new("/usr/bin/pacman")
+        let status = super::package_manager_command("/usr/bin/pacman")
             .arg("-S")
             .arg("--noconfirm")
             .args(real_pkg_names)

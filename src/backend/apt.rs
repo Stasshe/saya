@@ -28,7 +28,7 @@ impl Backend for AptBackend {
         if real_pkg_names.is_empty() {
             return Ok(());
         }
-        let status = Command::new("/usr/bin/apt-get")
+        let status = super::package_manager_command("/usr/bin/apt-get")
             .arg("install")
             .arg("-y")
             .args(real_pkg_names)
