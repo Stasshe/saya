@@ -34,6 +34,5 @@ sudo saya doctor           # shim整合性・PATH順序の検証
 
 ## リリース手順(開発者向け)
 
-GitHub Actionsの`version-bump`をworkflow_dispatchで実行(patch/minor/major選択)。
-`Cargo.toml`のバージョンを自動算出して更新・コミット・タグpushまで行う。
-タグpushにより`release.yml`が起動、x86_64/aarch64のmuslバイナリをビルドしGitHub Releasesへ添付する。
+GitHub Actionsの`release`をworkflow_dispatchで実行(patch/minor/major選択)。
+`Cargo.toml`バージョン自動算出→更新・コミット・タグpush→x86_64/aarch64のmuslバイナリビルド→GitHub Releasesへ添付、を1本のワークフローで行う。
