@@ -19,13 +19,10 @@ pub fn require_root() -> Result<()> {
     Ok(())
 }
 
-/// Resolves the "real" user behind a root-privileged invocation.
+/// Resolves the user whose manifest should be read and written.
 ///
-/// Under `sudo saya ...`, sudo sets `SUDO_UID` to the invoking user; we use
-/// that so config lives under the invoker's home, not `/root`. Without sudo
-/// (e.g. a root login shell running `saya ...` directly), there is no
-/// `SUDO_UID`, so we fall back to the current effective uid (whoami) — which
-/// at that point is root itself.
+/// Under sudo, `SUDO_UID` identifies the original user. Otherwise the current
+/// uid owns the manifest.
 pub fn resolve_invocation_user() -> Result<InvocationUser> {
     match sudo_uid()? {
         Some(uid) => lookup_passwd_entry(uid, true),

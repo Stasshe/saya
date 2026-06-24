@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crate::backend::BackendKind;
 use crate::commands::manifest_path;
 use crate::manifest::Manifest;
-use crate::privilege::{drop_to_user, resolve_original_user};
+use crate::privilege::{drop_to_user, resolve_invocation_user};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShimKind {
@@ -60,7 +60,7 @@ pub fn run(kind: ShimKind, args: &[String]) -> Result<i32> {
 }
 
 fn record_targets(kind: BackendKind, targets: &[String]) -> Result<()> {
-    let user = resolve_original_user()?;
+    let user = resolve_invocation_user()?;
     let path = manifest_path(&user.home);
     let mut manifest = Manifest::load(&path)?;
 

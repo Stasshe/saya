@@ -7,14 +7,14 @@ use anyhow::{Context, Result, bail};
 use crate::backend::Backend;
 use crate::cli::ImportArgs;
 use crate::manifest::Manifest;
-use crate::privilege::{OriginalUser, drop_to_user};
+use crate::privilege::{InvocationUser, drop_to_user};
 
 pub fn run(
     args: &ImportArgs,
     manifest: &mut Manifest,
     backend: &dyn Backend,
     path: &Path,
-    user: &OriginalUser,
+    user: &InvocationUser,
 ) -> Result<()> {
     if !args.manual {
         bail!("import currently only supports --manual");

@@ -4,13 +4,13 @@ use anyhow::Result;
 
 use crate::cli::AddArgs;
 use crate::manifest::{Manifest, PackageEntry};
-use crate::privilege::{OriginalUser, drop_to_user};
+use crate::privilege::{InvocationUser, drop_to_user};
 
 pub fn run_add(
     manifest: &mut Manifest,
     args: &AddArgs,
     path: &Path,
-    user: &OriginalUser,
+    user: &InvocationUser,
 ) -> Result<()> {
     manifest.packages.insert(
         args.logical.clone(),
@@ -30,7 +30,7 @@ pub fn run_forget(
     manifest: &mut Manifest,
     logical: &str,
     path: &Path,
-    user: &OriginalUser,
+    user: &InvocationUser,
 ) -> Result<()> {
     if manifest.packages.remove(logical).is_none() {
         println!("not in manifest: {logical}");

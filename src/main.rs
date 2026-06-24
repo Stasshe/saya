@@ -37,7 +37,7 @@ fn main() {
 fn run_saya_cli() -> Result<()> {
     let cli = cli::Cli::parse();
 
-    let user = privilege::resolve_original_user()?;
+    let user = privilege::resolve_invocation_user()?;
     let path = commands::manifest_path(&user.home);
 
     match cli.command {
