@@ -1,0 +1,55 @@
+// NOTE: untested on real Arch system — this dev environment has no pacman.
+// Implemented from `pacman` man page; compiles, but behavior is unverified.
+use std::process::Command;
+
+use anyhow::{bail, Context, Result};
+
+use super::{Backend, BackendKind};
+
+pub struct PacmanBackend;
+
+impl Backend for PacmanBackend {
+    fn kind(&self) -> BackendKind {
+        BackendKind::Pacman
+    }
+
+    fn is_installed(&self, real_pkg_name: &str) -> Result<bool> {
+        let status = Command::new("/usr/bin/pacman")
+            .args(["-Q", real_pkg_name])
+            .status()
+            .context("running pacman -Q")?;
+        Ok(status.success())
+    }
+
+    fn install(&self, real_pkg_names: &[String]) -> Result<()> {
+        if real_pkg_names.is_empty() {
+            return Ok(());
+        }
+        let status = Command::new("/usr/bin/pacman")
+            .arg("-S")
+            .arg("--noconfirm")
+            .args(real_pkg_names)
+            .status()
+            .context("running pacman -S")?;
+        if !status.success() {
+            bail!("pacman -S failed with {status}");
+        }
+        Ok(())
+    }
+
+    fn list_manually_installed(&self) -> Result<Vec<String>> {
+        let output = Command::new("/usr/bin/pacman")
+            .args(["-Qqe"])
+            .output()
+            .context("running pacman -Qqe")?;
+        if !output.status.success() {
+            bail!("pacman -Qqe failed with {}", output.status);
+        }
+        Ok(String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+}
