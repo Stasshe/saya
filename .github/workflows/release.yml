@@ -98,3 +98,18 @@ jobs:
           archive: saya-$tag-$target
           ref: refs/tags/${{ needs.bump-version.outputs.tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload checksum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          archive="saya-${{ needs.bump-version.outputs.tag }}-${{ matrix.target }}.tar.gz"
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "$tmp_dir"' EXIT
+          gh release download "${{ needs.bump-version.outputs.tag }}" \
+            --pattern "$archive" \
+            --dir "$tmp_dir"
+          (cd "$tmp_dir" && sha256sum "$archive" > "$archive.sha256")
+          gh release upload "${{ needs.bump-version.outputs.tag }}" \
+            "$tmp_dir/$archive.sha256" \
+            --clobber

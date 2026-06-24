@@ -39,19 +39,44 @@ fi
 
 archive="saya-${VERSION}-${target}.tar.gz"
 url="https://github.com/${REPO}/releases/download/${VERSION}/${archive}"
+checksum_url="${url}.sha256"
 
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 echo "downloading ${url}"
 curl -fsSL "$url" -o "${tmp_dir}/${archive}"
+
+if ! command -v sha256sum >/dev/null 2>&1; then
+  echo "sha256sum is required to verify the downloaded archive" >&2
+  exit 1
+fi
+
+echo "downloading ${checksum_url}"
+curl -fsSL "$checksum_url" -o "${tmp_dir}/${archive}.sha256"
+(cd "$tmp_dir" && sha256sum -c "${archive}.sha256")
+
+tar -tzf "${tmp_dir}/${archive}" > "${tmp_dir}/archive.list"
+unsafe_archive=0
+while IFS= read -r entry; do
+  case "$entry" in
+    "" | /* | ../* | */../* | .. | */..)
+      unsafe_archive=1
+      ;;
+  esac
+done < "${tmp_dir}/archive.list"
+if [ "$unsafe_archive" -ne 0 ]; then
+  echo "downloaded archive contains unsafe paths" >&2
+  exit 1
+fi
+
 tar -xzf "${tmp_dir}/${archive}" -C "$tmp_dir"
 
 bin_path="${tmp_dir}/saya"
-if [ ! -f "$bin_path" ]; then
+if [ ! -f "$bin_path" ] || [ -L "$bin_path" ]; then
   bin_path="$(find "$tmp_dir" -type f -name saya | head -1)"
 fi
-if [ -z "${bin_path:-}" ] || [ ! -f "$bin_path" ]; then
+if [ -z "${bin_path:-}" ] || [ ! -f "$bin_path" ] || [ -L "$bin_path" ]; then
   echo "saya binary not found in downloaded archive" >&2
   exit 1
 fi

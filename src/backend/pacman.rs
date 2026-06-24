@@ -28,6 +28,7 @@ impl Backend for PacmanBackend {
         let status = super::package_manager_command("/usr/bin/pacman")
             .arg("-S")
             .arg("--noconfirm")
+            .arg("--")
             .args(real_pkg_names)
             .status()
             .context("running pacman -S")?;

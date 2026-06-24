@@ -1,5 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 
+use crate::manifest::validate_package_name;
+
 #[derive(Parser)]
 #[command(
     name = "saya",
@@ -29,25 +31,27 @@ pub enum Command {
 #[derive(Args)]
 pub struct InstallArgs {
     /// Real package name(s) to install with the detected OS package manager.
-    #[arg(required = true)]
+    #[arg(required = true, value_parser = parse_package_name)]
     pub packages: Vec<String>,
 }
 
 #[derive(Args)]
 pub struct AddArgs {
     /// Logical package name, e.g. "neovim".
+    #[arg(value_parser = parse_package_name)]
     pub logical: String,
     /// Real apt package name(s), if different from the logical name.
-    #[arg(long = "apt")]
+    #[arg(long = "apt", value_parser = parse_package_name)]
     pub apt: Vec<String>,
     /// Real pacman package name(s), if different from the logical name.
-    #[arg(long = "pacman")]
+    #[arg(long = "pacman", value_parser = parse_package_name)]
     pub pacman: Vec<String>,
 }
 
 #[derive(Args)]
 pub struct ForgetArgs {
     /// Logical package name to remove from the manifest.
+    #[arg(value_parser = parse_package_name)]
     pub logical: String,
 }
 
@@ -59,4 +63,9 @@ pub struct ImportArgs {
     /// Open an editor to review/edit before saving, instead of just printing.
     #[arg(long)]
     pub edit: bool,
+}
+
+fn parse_package_name(value: &str) -> Result<String, String> {
+    validate_package_name(value)?;
+    Ok(value.to_string())
 }

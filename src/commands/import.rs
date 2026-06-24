@@ -1,12 +1,16 @@
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
 use crate::backend::Backend;
 use crate::cli::ImportArgs;
-use crate::manifest::Manifest;
+use crate::manifest::{Manifest, validate_package_name};
 use crate::privilege::{InvocationUser, drop_to_user};
 
 pub fn run(
@@ -65,9 +69,7 @@ pub fn run(
 /// Writes `candidates` to a tmpfile, opens `$EDITOR` (falling back to `vi`)
 /// on it, then reads back whatever lines remain.
 fn edit_candidates(candidates: &[String]) -> Result<Vec<String>> {
-    let tmp_path = std::env::temp_dir().join(format!("saya-import-{}.txt", std::process::id()));
-    fs::write(&tmp_path, candidates.join("\n") + "\n")
-        .with_context(|| format!("writing {}", tmp_path.display()))?;
+    let tmp_path = write_candidates_to_tempfile(candidates)?;
 
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
     let status = Command::new(&editor)
@@ -75,16 +77,58 @@ fn edit_candidates(candidates: &[String]) -> Result<Vec<String>> {
         .status()
         .with_context(|| format!("running editor {editor}"))?;
     if !status.success() {
+        let _ = fs::remove_file(&tmp_path);
         bail!("editor exited with {status}");
     }
 
-    let text =
-        fs::read_to_string(&tmp_path).with_context(|| format!("reading {}", tmp_path.display()))?;
+    let text = match fs::read_to_string(&tmp_path) {
+        Ok(text) => text,
+        Err(err) => {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err).with_context(|| format!("reading {}", tmp_path.display()));
+        }
+    };
     let _ = fs::remove_file(&tmp_path);
-    Ok(text
-        .lines()
+    text.lines()
         .map(str::trim)
         .filter(|l| !l.is_empty())
-        .map(str::to_string)
-        .collect())
+        .map(|line| {
+            validate_package_name(line)
+                .map_err(anyhow::Error::msg)
+                .with_context(|| format!("invalid package name from editor: {line:?}"))?;
+            Ok(line.to_string())
+        })
+        .collect()
+}
+
+fn write_candidates_to_tempfile(candidates: &[String]) -> Result<PathBuf> {
+    let mut last_error = None;
+    for attempt in 0..100 {
+        let tmp_path =
+            std::env::temp_dir().join(format!("saya-import-{}-{attempt}.txt", std::process::id()));
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp_path)
+        {
+            Ok(file) => file,
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
+                last_error = Some(err);
+                continue;
+            }
+            Err(err) => {
+                return Err(err).with_context(|| format!("creating {}", tmp_path.display()));
+            }
+        };
+        file.write_all((candidates.join("\n") + "\n").as_bytes())
+            .with_context(|| format!("writing {}", tmp_path.display()))?;
+        return Ok(tmp_path);
+    }
+
+    let message = match last_error {
+        Some(err) => format!("could not create import tempfile after 100 attempts: {err}"),
+        None => "could not create import tempfile after 100 attempts".to_string(),
+    };
+    bail!(message)
 }

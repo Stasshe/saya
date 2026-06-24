@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendKind;
 
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
+pub const CURRENT_VERSION: u32 = 0;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Manifest {
     pub version: u32,
     #[serde(default)]
@@ -22,6 +24,15 @@ pub struct PackageEntry {
     pub apt: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pacman: Vec<String>,
+}
+
+impl Default for Manifest {
+    fn default() -> Self {
+        Self {
+            version: CURRENT_VERSION,
+            packages: BTreeMap::new(),
+        }
+    }
 }
 
 impl PackageEntry {
@@ -56,11 +67,16 @@ impl Manifest {
             .with_context(|| format!("reading manifest at {}", path.display()))?;
         let manifest: Self = toml::from_str(&text)
             .with_context(|| format!("parsing manifest at {}", path.display()))?;
+        manifest
+            .validate()
+            .with_context(|| format!("validating manifest at {}", path.display()))?;
         Ok(manifest)
     }
 
     /// Atomic write: write to a sibling `.tmp` file then rename over the target.
     pub fn save(&self, path: &Path) -> Result<()> {
+        self.validate()
+            .with_context(|| format!("validating manifest at {}", path.display()))?;
         let text = toml::to_string_pretty(self).context("serializing manifest")?;
         let tmp_path = path.with_extension("tmp");
         if let Some(parent) = path.parent() {
@@ -95,6 +111,8 @@ impl Manifest {
     /// Records `real_name` under `logical` for `kind`, creating the entry if needed.
     /// No-op if already recorded.
     pub fn record(&mut self, logical: &str, real_name: &str, kind: BackendKind, used_sudo: bool) {
+        debug_assert!(validate_package_name(logical).is_ok());
+        debug_assert!(validate_package_name(real_name).is_ok());
         let entry = self.packages.entry(logical.to_string()).or_default();
         entry.sudo = Some(used_sudo);
         if logical == real_name {
@@ -106,6 +124,54 @@ impl Manifest {
             names.push(real_name.to_string());
         }
     }
+
+    fn validate(&self) -> Result<()> {
+        if self.version != CURRENT_VERSION {
+            anyhow::bail!(
+                "unsupported manifest version {}; expected {}",
+                self.version,
+                CURRENT_VERSION
+            );
+        }
+
+        for (logical, entry) in &self.packages {
+            validate_package_name(logical)
+                .map_err(anyhow::Error::msg)
+                .with_context(|| format!("invalid logical package name {logical:?}"))?;
+            for name in entry.apt.iter().chain(entry.pacman.iter()) {
+                validate_package_name(name)
+                    .map_err(anyhow::Error::msg)
+                    .with_context(|| format!("invalid real package name {name:?}"))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub fn validate_package_name(name: &str) -> std::result::Result<(), String> {
+    if name.is_empty() {
+        return Err("package name cannot be empty".to_string());
+    }
+
+    let mut chars = name.chars();
+    let first = chars
+        .next()
+        .expect("non-empty string has a first character");
+    if !first.is_ascii_alphanumeric() {
+        return Err("package name must start with an ASCII letter or digit".to_string());
+    }
+
+    if let Some(ch) = chars.find(|ch| !is_allowed_package_name_char(*ch)) {
+        return Err(format!(
+            "package name contains unsupported character {ch:?}"
+        ));
+    }
+
+    Ok(())
+}
+
+fn is_allowed_package_name_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '+' | '-' | '@' | ':')
 }
 
 #[cfg(test)]
@@ -189,6 +255,33 @@ mod tests {
 
         manifest.record("curl", "curl", BackendKind::Apt, true);
         assert_eq!(manifest.packages["curl"].sudo, Some(true));
+    }
+
+    #[test]
+    fn load_rejects_unsupported_manifest_version() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        std::fs::write(&path, "version = 999\n").unwrap();
+
+        let err = Manifest::load(&path).unwrap_err().to_string();
+        assert!(err.contains("validating manifest"));
+    }
+
+    #[test]
+    fn validate_package_name_rejects_option_like_name() {
+        assert!(validate_package_name("--download-only").is_err());
+    }
+
+    #[test]
+    fn validate_package_name_rejects_path_like_name() {
+        assert!(validate_package_name("foo/bar").is_err());
+    }
+
+    #[test]
+    fn validate_package_name_accepts_common_package_names() {
+        assert!(validate_package_name("libssl-dev:amd64").is_ok());
+        assert!(validate_package_name("python-pynvim").is_ok());
+        assert!(validate_package_name("mingw-w64-gcc").is_ok());
     }
 
     fn tempdir() -> std::path::PathBuf {
