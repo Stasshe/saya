@@ -29,9 +29,9 @@ case "$arch" in
 esac
 
 if [ "$VERSION" = "latest" ]; then
-  VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" |
-    grep '"tag_name"' | head -1 | cut -d'"' -f4)"
-  if [ -z "$VERSION" ]; then
+  latest_url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"
+  VERSION="${latest_url##*/}"
+  if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
     echo "could not resolve latest release tag" >&2
     exit 1
   fi
