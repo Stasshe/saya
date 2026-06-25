@@ -12,6 +12,31 @@ REPO="Stasshe/saya"
 INSTALL_DIR="${SAYA_INSTALL_DIR:-/usr/local/bin}"
 VERSION="${SAYA_VERSION:-latest}"
 
+latest_version_from_git() {
+  if ! command -v git >/dev/null 2>&1; then
+    return 1
+  fi
+
+  refs="$(git ls-remote --tags --refs "https://github.com/${REPO}.git" 2>/dev/null)" || return 1
+  latest_version="$(printf '%s\n' "$refs" \
+    | sed 's#.*refs/tags/##' \
+    | sort -V \
+    | tail -n 1)"
+  if [ -z "$latest_version" ]; then
+    return 1
+  fi
+  printf '%s\n' "$latest_version"
+}
+
+latest_version_from_curl() {
+  latest_url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"
+  latest_version="${latest_url##*/}"
+  if [ -z "$latest_version" ] || [ "$latest_version" = "latest" ]; then
+    return 1
+  fi
+  printf '%s\n' "$latest_version"
+}
+
 os="$(uname -s)"
 if [ "$os" != "Linux" ]; then
   echo "saya only supports Linux (got: $os)" >&2
@@ -29,8 +54,11 @@ case "$arch" in
 esac
 
 if [ "$VERSION" = "latest" ]; then
-  latest_url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"
-  VERSION="${latest_url##*/}"
+  if ! VERSION="$(latest_version_from_git)"; then
+    if ! VERSION="$(latest_version_from_curl)"; then
+      VERSION=""
+    fi
+  fi
   if [ -z "$VERSION" ] || [ "$VERSION" = "latest" ]; then
     echo "could not resolve latest release tag" >&2
     exit 1
