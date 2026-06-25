@@ -22,6 +22,14 @@ fn run_saya_cli() -> Result<()> {
 
     match cli.command {
         cli::Command::SelfUpdate => commands::self_update::run(),
+        cli::Command::Update => {
+            let backend = backend::detect_backend()?;
+            backend.update()
+        }
+        cli::Command::Upgrade => {
+            let backend = backend::detect_backend()?;
+            backend.upgrade()
+        }
         cli::Command::Apply => {
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;

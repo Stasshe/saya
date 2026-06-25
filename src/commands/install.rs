@@ -49,6 +49,14 @@ mod tests {
             BackendKind::Apt
         }
 
+        fn update(&self) -> Result<()> {
+            Ok(())
+        }
+
+        fn upgrade(&self) -> Result<()> {
+            Ok(())
+        }
+
         fn is_installed(&self, _real_pkg_name: &str) -> Result<bool> {
             Ok(false)
         }

@@ -13,6 +13,28 @@ impl Backend for PacmanBackend {
         BackendKind::Pacman
     }
 
+    fn update(&self) -> Result<()> {
+        let status = super::package_manager_command("/usr/bin/pacman")
+            .arg("-Sy")
+            .status()
+            .context("running pacman -Sy")?;
+        if !status.success() {
+            bail!("pacman -Sy failed with {status}");
+        }
+        Ok(())
+    }
+
+    fn upgrade(&self) -> Result<()> {
+        let status = super::package_manager_command("/usr/bin/pacman")
+            .arg("-Syu")
+            .status()
+            .context("running pacman -Syu")?;
+        if !status.success() {
+            bail!("pacman -Syu failed with {status}");
+        }
+        Ok(())
+    }
+
     fn is_installed(&self, real_pkg_name: &str) -> Result<bool> {
         let output = Command::new("/usr/bin/pacman")
             .args(["-Q", real_pkg_name])

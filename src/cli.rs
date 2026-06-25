@@ -16,6 +16,10 @@ pub struct Cli {
 pub enum Command {
     /// Update this saya binary from the latest GitHub Release.
     SelfUpdate,
+    /// Update package manager metadata.
+    Update,
+    /// Upgrade installed packages with the detected OS package manager.
+    Upgrade,
     /// Install every package listed in the manifest that isn't installed yet.
     Apply,
     /// Show which manifest packages are installed/missing without installing.

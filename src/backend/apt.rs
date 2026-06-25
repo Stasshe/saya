@@ -11,6 +11,28 @@ impl Backend for AptBackend {
         BackendKind::Apt
     }
 
+    fn update(&self) -> Result<()> {
+        let status = super::package_manager_command("/usr/bin/apt-get")
+            .arg("update")
+            .status()
+            .context("running apt-get update")?;
+        if !status.success() {
+            bail!("apt-get update failed with {status}");
+        }
+        Ok(())
+    }
+
+    fn upgrade(&self) -> Result<()> {
+        let status = super::package_manager_command("/usr/bin/apt-get")
+            .arg("upgrade")
+            .status()
+            .context("running apt-get upgrade")?;
+        if !status.success() {
+            bail!("apt-get upgrade failed with {status}");
+        }
+        Ok(())
+    }
+
     fn is_installed(&self, real_pkg_name: &str) -> Result<bool> {
         let output = Command::new("/usr/bin/dpkg-query")
             .args(["-W", "-f=${Status}", real_pkg_name])

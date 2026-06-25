@@ -13,6 +13,8 @@ pub enum BackendKind {
 
 pub trait Backend {
     fn kind(&self) -> BackendKind;
+    fn update(&self) -> Result<()>;
+    fn upgrade(&self) -> Result<()>;
     fn is_installed(&self, real_pkg_name: &str) -> Result<bool>;
     fn install(&self, real_pkg_names: &[String]) -> Result<()>;
     fn list_manually_installed(&self) -> Result<Vec<String>>;
