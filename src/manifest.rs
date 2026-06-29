@@ -78,6 +78,9 @@ impl Manifest {
         self.validate()
             .with_context(|| format!("validating manifest at {}", path.display()))?;
         let text = toml::to_string_pretty(self).context("serializing manifest")?;
+        if fs::read(path).is_ok_and(|current| current == text.as_bytes()) {
+            return Ok(());
+        }
         let tmp_path = path.with_extension("tmp");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -175,6 +178,8 @@ fn is_allowed_package_name_char(ch: char) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::MetadataExt;
+
     use super::*;
 
     #[test]
@@ -197,6 +202,19 @@ mod tests {
         let loaded = Manifest::load(&path).unwrap();
         assert_eq!(loaded, manifest);
         assert!(!path.with_extension("tmp").exists());
+    }
+
+    #[test]
+    fn save_does_not_replace_an_unchanged_file() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        let manifest = Manifest::default();
+        manifest.save(&path).unwrap();
+        let inode = std::fs::metadata(&path).unwrap().ino();
+
+        manifest.save(&path).unwrap();
+
+        assert_eq!(std::fs::metadata(path).unwrap().ino(), inode);
     }
 
     #[test]

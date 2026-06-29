@@ -1,5 +1,4 @@
 pub mod add;
-pub mod apply;
 pub mod import;
 pub mod install;
 pub mod self_update;

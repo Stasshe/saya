@@ -21,24 +21,15 @@ pub enum Command {
     /// Upgrade installed packages with the detected OS package manager.
     Upgrade,
     /// Install every package listed in the manifest that isn't installed yet.
-    Apply,
+    Install,
     /// Show which manifest packages are installed/missing without installing.
     Status,
-    /// Install packages and record them in the manifest on success.
-    Install(InstallArgs),
-    /// Record a package in the manifest.
+    /// Install a package and record it in the manifest on success.
     Add(AddArgs),
     /// Remove a package from the manifest.
     Forget(ForgetArgs),
     /// List manually-installed packages not yet in the manifest.
     Import(ImportArgs),
-}
-
-#[derive(Args)]
-pub struct InstallArgs {
-    /// Real package name(s) to install with the detected OS package manager.
-    #[arg(required = true, value_parser = parse_package_name)]
-    pub packages: Vec<String>,
 }
 
 #[derive(Args)]
@@ -74,4 +65,22 @@ pub struct ImportArgs {
 fn parse_package_name(value: &str) -> Result<String, String> {
     validate_package_name(value)?;
     Ok(value.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn install_accepts_no_package_arguments() {
+        let cli = Cli::try_parse_from(["saya", "install"]).unwrap();
+
+        assert!(matches!(cli.command, Command::Install));
+        assert!(Cli::try_parse_from(["saya", "install", "git"]).is_err());
+    }
+
+    #[test]
+    fn apply_command_is_not_available() {
+        assert!(Cli::try_parse_from(["saya", "apply"]).is_err());
+    }
 }

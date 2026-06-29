@@ -2,10 +2,10 @@
 
 OS標準パッケージマネージャ(apt/pacman)の薄いラッパー。chezmoi(dotfiles)、mise(devtools)に対し、OSパッケージの「意図記録」と「再現」だけ担う。
 
-- **意図記録**: `saya install foo`でインストールに成功した直接指定パッケージ名だけマニフェストへ記録する。
-- **一方向適用**: マニフェストにあって未インストールのものだけインストール。マニフェストから消えてもアンインストールしない。
+- **意図記録**: `saya add foo`でインストールに成功したパッケージをマニフェストへ記録する。
+- **一方向適用**: `saya install`でマニフェストにあって未インストールのものだけインストールする。マニフェストから消えてもアンインストールしない。
 
-マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に保存する。`sudo`経由で実行した場合もrootではなく元ユーザー側に保存する。
+マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に保存する。`sudo`経由で実行した場合もrootではなく元ユーザー側に保存する。保存内容が同一ならファイルを書き換えない。
 
 詳細設計は[SPECIFICATION.md](./SPECIFICATION.md)参照。
 
@@ -29,10 +29,11 @@ cargo install --git https://github.com/Stasshe/saya
 saya self-update           # 最新のGitHub Releaseからsaya本体を更新する
 saya update                # apt-get update / pacman -Sy を実行する
 saya upgrade               # apt-get upgrade / pacman -Syu を実行する
-saya install neovim        # apt/pacmanをsudo経由で呼び出し、成功したら記録する
+saya add neovim            # インストールし、成功したら記録する
+saya add nvim --apt neovim # 論理名とAPTパッケージ名が違う場合
 
 saya status                # マニフェストとインストール状態の差分確認
-saya apply                 # マニフェストにあって未インストールのものを入れる
+saya install               # マニフェストにあって未インストールのものを入れる
 ```
 
 ## リリース手順(開発者向け)

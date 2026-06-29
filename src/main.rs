@@ -30,24 +30,20 @@ fn run_saya_cli() -> Result<()> {
             let backend = backend::detect_backend()?;
             backend.upgrade()
         }
-        cli::Command::Apply => {
+        cli::Command::Install => {
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;
-            commands::apply::run(&manifest, backend.as_ref())
+            commands::install::run(&manifest, backend.as_ref())
         }
         cli::Command::Status => {
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;
             commands::status::run(&manifest, backend.as_ref())
         }
-        cli::Command::Install(args) => {
-            let mut manifest = manifest::Manifest::load(&path)?;
-            let backend = backend::detect_backend()?;
-            commands::install::run(&mut manifest, &args, backend.as_ref(), &path, &user)
-        }
         cli::Command::Add(args) => {
             let mut manifest = manifest::Manifest::load(&path)?;
-            commands::add::run_add(&mut manifest, &args, &path, &user)
+            let backend = backend::detect_backend()?;
+            commands::add::run_add(&mut manifest, &args, backend.as_ref(), &path, &user)
         }
         cli::Command::Forget(args) => {
             let mut manifest = manifest::Manifest::load(&path)?;

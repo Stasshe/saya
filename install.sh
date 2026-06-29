@@ -86,4 +86,4 @@ else
 fi
 
 echo "saya ${VERSION} installed to ${INSTALL_DIR}/saya"
-echo "next: saya install <package>"
+echo "next: saya add <package>"
