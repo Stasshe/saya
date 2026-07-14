@@ -71,6 +71,23 @@ impl Backend for AptBackend {
         Ok(())
     }
 
+    fn uninstall(&self, real_pkg_names: &[String]) -> Result<()> {
+        if real_pkg_names.is_empty() {
+            return Ok(());
+        }
+        let status = super::package_manager_command("/usr/bin/apt-get")
+            .arg("remove")
+            .arg("-y")
+            .arg("--")
+            .args(real_pkg_names)
+            .status()
+            .context("running apt-get remove")?;
+        if !status.success() {
+            bail!("apt-get remove failed with {status}");
+        }
+        Ok(())
+    }
+
     fn list_manually_installed(&self) -> Result<Vec<String>> {
         let output = Command::new("/usr/bin/apt-mark")
             .arg("showmanual")

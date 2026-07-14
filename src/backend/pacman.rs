@@ -71,6 +71,23 @@ impl Backend for PacmanBackend {
         Ok(())
     }
 
+    fn uninstall(&self, real_pkg_names: &[String]) -> Result<()> {
+        if real_pkg_names.is_empty() {
+            return Ok(());
+        }
+        let status = super::package_manager_command("/usr/bin/pacman")
+            .arg("-R")
+            .arg("--noconfirm")
+            .arg("--")
+            .args(real_pkg_names)
+            .status()
+            .context("running pacman -R")?;
+        if !status.success() {
+            bail!("pacman -R failed with {status}");
+        }
+        Ok(())
+    }
+
     fn list_manually_installed(&self) -> Result<Vec<String>> {
         let output = Command::new("/usr/bin/pacman")
             .args(["-Qqe"])

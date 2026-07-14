@@ -20,36 +20,31 @@ pub enum Command {
     Update,
     /// Upgrade installed packages with the detected OS package manager.
     Upgrade,
-    /// Install every package listed in the manifest that isn't installed yet.
-    Install,
+    /// With no name: install every package listed in the manifest that
+    /// isn't installed yet. With a name: install that package and record
+    /// it in the manifest on success.
+    Install(InstallArgs),
     /// Show which manifest packages are installed/missing without installing.
     Status,
-    /// Install a package and record it in the manifest on success.
-    Add(AddArgs),
-    /// Remove a package from the manifest.
-    Forget(ForgetArgs),
+    /// Uninstall a package and remove it from the manifest.
+    Uninstall(UninstallArgs),
     /// List manually-installed packages not yet in the manifest.
     Import(ImportArgs),
 }
 
 #[derive(Args)]
-pub struct AddArgs {
-    /// Logical package name, e.g. "neovim".
+pub struct InstallArgs {
+    /// Package name as known to the detected backend, e.g. "neovim".
+    /// Omit to install everything missing from the manifest.
     #[arg(value_parser = parse_package_name)]
-    pub logical: String,
-    /// Real apt package name(s), if different from the logical name.
-    #[arg(long = "apt", value_parser = parse_package_name)]
-    pub apt: Vec<String>,
-    /// Real pacman package name(s), if different from the logical name.
-    #[arg(long = "pacman", value_parser = parse_package_name)]
-    pub pacman: Vec<String>,
+    pub name: Option<String>,
 }
 
 #[derive(Args)]
-pub struct ForgetArgs {
-    /// Logical package name to remove from the manifest.
+pub struct UninstallArgs {
+    /// Package name to uninstall and remove from the manifest.
     #[arg(value_parser = parse_package_name)]
-    pub logical: String,
+    pub name: String,
 }
 
 #[derive(Args)]
@@ -75,8 +70,26 @@ mod tests {
     fn install_accepts_no_package_arguments() {
         let cli = Cli::try_parse_from(["saya", "install"]).unwrap();
 
-        assert!(matches!(cli.command, Command::Install));
-        assert!(Cli::try_parse_from(["saya", "install", "git"]).is_err());
+        assert!(matches!(
+            cli.command,
+            Command::Install(InstallArgs { name: None })
+        ));
+    }
+
+    #[test]
+    fn install_accepts_a_package_name() {
+        let cli = Cli::try_parse_from(["saya", "install", "git"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Command::Install(InstallArgs { name: Some(name) }) if name == "git"
+        ));
+    }
+
+    #[test]
+    fn uninstall_requires_a_package_name() {
+        assert!(Cli::try_parse_from(["saya", "uninstall"]).is_err());
+        assert!(Cli::try_parse_from(["saya", "uninstall", "git"]).is_ok());
     }
 
     #[test]

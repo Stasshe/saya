@@ -11,7 +11,7 @@ pub fn run(manifest: &Manifest, backend: &dyn Backend) -> Result<()> {
     }
     for s in statuses {
         let mark = if s.installed { "installed" } else { "missing" };
-        println!("{:<24} {:<24} {}", s.logical, s.real_name, mark);
+        println!("{:<24} {}", s.name, mark);
     }
     Ok(())
 }

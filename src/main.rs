@@ -30,24 +30,34 @@ fn run_saya_cli() -> Result<()> {
             let backend = backend::detect_backend()?;
             backend.upgrade()
         }
-        cli::Command::Install => {
-            let manifest = manifest::Manifest::load(&path)?;
+        cli::Command::Install(args) => {
             let backend = backend::detect_backend()?;
-            commands::install::run(&manifest, backend.as_ref())
+            match args.name {
+                None => {
+                    let manifest = manifest::Manifest::load(&path)?;
+                    commands::install::run_missing(&manifest, backend.as_ref())
+                }
+                Some(name) => {
+                    let mut manifest = manifest::Manifest::load(&path)?;
+                    commands::install::run_named(
+                        &mut manifest,
+                        &name,
+                        backend.as_ref(),
+                        &path,
+                        &user,
+                    )
+                }
+            }
         }
         cli::Command::Status => {
             let manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;
             commands::status::run(&manifest, backend.as_ref())
         }
-        cli::Command::Add(args) => {
+        cli::Command::Uninstall(args) => {
             let mut manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;
-            commands::add::run_add(&mut manifest, &args, backend.as_ref(), &path, &user)
-        }
-        cli::Command::Forget(args) => {
-            let mut manifest = manifest::Manifest::load(&path)?;
-            commands::add::run_forget(&mut manifest, &args.logical, &path, &user)
+            commands::uninstall::run(&mut manifest, &args.name, backend.as_ref(), &path, &user)
         }
         cli::Command::Import(args) => {
             let mut manifest = manifest::Manifest::load(&path)?;

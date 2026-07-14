@@ -27,11 +27,7 @@ pub fn run(
     let candidates: Vec<String> = backend
         .list_manually_installed()?
         .into_iter()
-        .filter(|name| {
-            manifest
-                .find_logical_name_by_real(name, backend.kind())
-                .is_none()
-        })
+        .filter(|name| !manifest.contains(name, backend.kind()))
         .collect();
 
     if candidates.is_empty() {
@@ -51,11 +47,8 @@ pub fn run(
     let selected = edit_candidates(&candidates)?;
     let mut changed = false;
     for name in &selected {
-        if manifest
-            .find_logical_name_by_real(name, backend.kind())
-            .is_none()
-        {
-            manifest.record(name, name, backend.kind());
+        if !manifest.contains(name, backend.kind()) {
+            manifest.record(name, backend.kind());
             changed = true;
         }
     }

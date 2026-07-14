@@ -2,8 +2,9 @@
 
 OS標準パッケージマネージャ(apt/pacman)の薄いラッパー。chezmoi(dotfiles)、mise(devtools)に対し、OSパッケージの「意図記録」と「再現」だけ担う。
 
-- **意図記録**: `saya add foo`でインストールに成功したパッケージをマニフェストへ記録する。
-- **一方向適用**: `saya install`でマニフェストにあって未インストールのものだけインストールする。マニフェストから消えてもアンインストールしない。
+- **意図記録**: `saya install foo`でインストールに成功したパッケージをマニフェストへ記録する。
+- **一方向適用**: `saya install`(引数なし)でマニフェストにあって未インストールのものだけインストールする。
+- **明示的な削除**: `saya uninstall foo`でアンインストールし、マニフェストからも削除する。
 
 マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に保存する。`sudo`経由で実行した場合もrootではなく元ユーザー側に保存する。保存内容が同一ならファイルを書き換えない。
 
@@ -29,12 +30,32 @@ cargo install --git https://github.com/Stasshe/saya
 saya self-update           # 最新のGitHub Releaseからsaya本体を更新する
 saya update                # apt-get update / pacman -Sy を実行する
 saya upgrade               # apt-get upgrade / pacman -Syu を実行する
-saya add neovim            # インストールし、成功したら記録する
-saya add nvim --apt neovim # 論理名とAPTパッケージ名が違う場合
+saya install neovim        # 検出したbackendでインストールし、成功したら記録する
+saya install               # マニフェストにあって未インストールのものを入れる(引数なし)
 
 saya status                # マニフェストとインストール状態の差分確認
-saya install               # マニフェストにあって未インストールのものを入れる
+saya uninstall neovim      # アンインストールし、マニフェストから削除する
 ```
+
+## マニフェスト
+
+`~/.config/saya/packages.toml`に、apt/pacmanそれぞれのパッケージ名をそのまま並べる。
+
+```toml
+schema_version = 3
+apt = [
+    "neovim",
+    "build-essential",
+]
+pacman = [
+    "neovim",
+    "base-devel",
+]
+```
+
+- apt/pacman間でのパッケージ名の対応付けはしない。`saya install <name>`は今動いているOSのbackend(apt or pacman)を判定し、その配列にだけ名前を追記する。他方のOSにも入れたい場合は、そちらの環境で改めて`saya install <name>`を実行する。
+- 同じアプリでもOSごとにパッケージ名が異なることが多い(例: apt=`build-essential` / pacman=`base-devel`)。この場合は各OSでそのOSのパッケージ名を`install`すればよい。
+- `saya install`(引数なし)/`saya status`は今動いているOS側の配列だけを見る。
 
 ## リリース手順(開発者向け)
 

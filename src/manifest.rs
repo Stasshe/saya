@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -7,19 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendKind;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 2;
+pub const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub schema_version: u32,
-    #[serde(default)]
-    pub packages: BTreeMap<String, PackageEntry>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Default, PartialEq)]
-#[serde(deny_unknown_fields)]
-pub struct PackageEntry {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apt: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -30,30 +22,8 @@ impl Default for Manifest {
     fn default() -> Self {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
-            packages: BTreeMap::new(),
-        }
-    }
-}
-
-impl PackageEntry {
-    /// Real package names for `kind`. Empty list means the logical name
-    /// itself is the real package name on every distro.
-    pub fn resolve_names(&self, logical: &str, kind: BackendKind) -> Vec<String> {
-        let names = match kind {
-            BackendKind::Apt => &self.apt,
-            BackendKind::Pacman => &self.pacman,
-        };
-        if names.is_empty() {
-            vec![logical.to_string()]
-        } else {
-            names.clone()
-        }
-    }
-
-    fn names_for_mut(&mut self, kind: BackendKind) -> &mut Vec<String> {
-        match kind {
-            BackendKind::Apt => &mut self.apt,
-            BackendKind::Pacman => &mut self.pacman,
+            apt: Vec::new(),
+            pacman: Vec::new(),
         }
     }
 }
@@ -92,39 +62,39 @@ impl Manifest {
         Ok(())
     }
 
-    /// Finds the logical name whose real package list (for `kind`) already
-    /// contains `real_name`, or whose logical name equals `real_name` with an
-    /// empty list for `kind` (implicit real == logical).
-    pub fn find_logical_name_by_real(&self, real_name: &str, kind: BackendKind) -> Option<String> {
-        for (logical, entry) in &self.packages {
-            let names = match kind {
-                BackendKind::Apt => &entry.apt,
-                BackendKind::Pacman => &entry.pacman,
-            };
-            if names.iter().any(|n| n == real_name) {
-                return Some(logical.clone());
-            }
-            if names.is_empty() && logical == real_name {
-                return Some(logical.clone());
-            }
+    pub fn names(&self, kind: BackendKind) -> &[String] {
+        match kind {
+            BackendKind::Apt => &self.apt,
+            BackendKind::Pacman => &self.pacman,
         }
-        None
     }
 
-    /// Records `real_name` under `logical` for `kind`, creating the entry if needed.
-    /// No-op if already recorded.
-    pub fn record(&mut self, logical: &str, real_name: &str, kind: BackendKind) {
-        debug_assert!(validate_package_name(logical).is_ok());
-        debug_assert!(validate_package_name(real_name).is_ok());
-        let entry = self.packages.entry(logical.to_string()).or_default();
-        if logical == real_name {
-            // implicit form: leave the per-backend list empty.
-            return;
+    fn names_mut(&mut self, kind: BackendKind) -> &mut Vec<String> {
+        match kind {
+            BackendKind::Apt => &mut self.apt,
+            BackendKind::Pacman => &mut self.pacman,
         }
-        let names = entry.names_for_mut(kind);
-        if !names.iter().any(|n| n == real_name) {
-            names.push(real_name.to_string());
+    }
+
+    pub fn contains(&self, name: &str, kind: BackendKind) -> bool {
+        self.names(kind).iter().any(|n| n == name)
+    }
+
+    /// Appends `name` to `kind`'s list. No-op if already present.
+    pub fn record(&mut self, name: &str, kind: BackendKind) {
+        debug_assert!(validate_package_name(name).is_ok());
+        let names = self.names_mut(kind);
+        if !names.iter().any(|n| n == name) {
+            names.push(name.to_string());
         }
+    }
+
+    /// Removes `name` from `kind`'s list. Returns whether it was present.
+    pub fn remove(&mut self, name: &str, kind: BackendKind) -> bool {
+        let names = self.names_mut(kind);
+        let len_before = names.len();
+        names.retain(|n| n != name);
+        names.len() != len_before
     }
 
     fn validate(&self) -> Result<()> {
@@ -136,15 +106,10 @@ impl Manifest {
             );
         }
 
-        for (logical, entry) in &self.packages {
-            validate_package_name(logical)
+        for name in self.apt.iter().chain(self.pacman.iter()) {
+            validate_package_name(name)
                 .map_err(anyhow::Error::msg)
-                .with_context(|| format!("invalid logical package name {logical:?}"))?;
-            for name in entry.apt.iter().chain(entry.pacman.iter()) {
-                validate_package_name(name)
-                    .map_err(anyhow::Error::msg)
-                    .with_context(|| format!("invalid real package name {name:?}"))?;
-            }
+                .with_context(|| format!("invalid package name {name:?}"))?;
         }
         Ok(())
     }
@@ -195,8 +160,8 @@ mod tests {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         let mut manifest = Manifest::default();
-        manifest.record("git", "git", BackendKind::Apt);
-        manifest.record("neovim", "neovim", BackendKind::Pacman);
+        manifest.record("git", BackendKind::Apt);
+        manifest.record("neovim", BackendKind::Pacman);
         manifest.save(&path).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
@@ -218,49 +183,36 @@ mod tests {
     }
 
     #[test]
-    fn resolve_names_falls_back_to_logical_when_empty() {
-        let entry = PackageEntry::default();
-        assert_eq!(entry.resolve_names("git", BackendKind::Apt), vec!["git"]);
-    }
-
-    #[test]
-    fn resolve_names_uses_explicit_list_when_present() {
-        let entry = PackageEntry {
-            apt: vec!["neovim".to_string()],
-            pacman: vec![],
-        };
-        assert_eq!(
-            entry.resolve_names("nvim", BackendKind::Apt),
-            vec!["neovim"]
-        );
-        assert_eq!(
-            entry.resolve_names("nvim", BackendKind::Pacman),
-            vec!["nvim"]
-        );
-    }
-
-    #[test]
-    fn find_logical_name_by_real_matches_explicit_list() {
+    fn record_is_idempotent() {
         let mut manifest = Manifest::default();
-        manifest.record("nvim", "neovim", BackendKind::Apt);
-        assert_eq!(
-            manifest.find_logical_name_by_real("neovim", BackendKind::Apt),
-            Some("nvim".to_string())
-        );
-        assert_eq!(
-            manifest.find_logical_name_by_real("neovim", BackendKind::Pacman),
-            None
-        );
+        manifest.record("git", BackendKind::Apt);
+        manifest.record("git", BackendKind::Apt);
+        assert_eq!(manifest.apt, vec!["git".to_string()]);
     }
 
     #[test]
-    fn find_logical_name_by_real_matches_implicit_logical_name() {
+    fn record_keeps_backends_independent() {
         let mut manifest = Manifest::default();
-        manifest.record("git", "git", BackendKind::Apt);
-        assert_eq!(
-            manifest.find_logical_name_by_real("git", BackendKind::Apt),
-            Some("git".to_string())
-        );
+        manifest.record("neovim", BackendKind::Apt);
+        assert!(manifest.contains("neovim", BackendKind::Apt));
+        assert!(!manifest.contains("neovim", BackendKind::Pacman));
+    }
+
+    #[test]
+    fn remove_removes_only_from_matching_backend() {
+        let mut manifest = Manifest::default();
+        manifest.record("neovim", BackendKind::Apt);
+        manifest.record("neovim", BackendKind::Pacman);
+
+        assert!(manifest.remove("neovim", BackendKind::Apt));
+        assert!(!manifest.contains("neovim", BackendKind::Apt));
+        assert!(manifest.contains("neovim", BackendKind::Pacman));
+    }
+
+    #[test]
+    fn remove_returns_false_when_absent() {
+        let mut manifest = Manifest::default();
+        assert!(!manifest.remove("neovim", BackendKind::Apt));
     }
 
     #[test]
@@ -271,6 +223,15 @@ mod tests {
 
         let err = Manifest::load(&path).unwrap_err().to_string();
         assert!(err.contains("validating manifest"));
+    }
+
+    #[test]
+    fn load_rejects_old_schema_shape() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        std::fs::write(&path, "schema_version = 2\n[packages.git]\napt = []\n").unwrap();
+
+        assert!(Manifest::load(&path).is_err());
     }
 
     #[test]
