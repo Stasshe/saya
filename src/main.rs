@@ -32,21 +32,19 @@ fn run_saya_cli() -> Result<()> {
         }
         cli::Command::Install(args) => {
             let backend = backend::detect_backend()?;
-            match args.name {
-                None => {
-                    let manifest = manifest::Manifest::load(&path)?;
-                    commands::install::run_missing(&manifest, backend.as_ref())
-                }
-                Some(name) => {
-                    let mut manifest = manifest::Manifest::load(&path)?;
-                    commands::install::run_named(
-                        &mut manifest,
-                        &name,
-                        backend.as_ref(),
-                        &path,
-                        &user,
-                    )
-                }
+            if args.names.is_empty() {
+                let manifest = manifest::Manifest::load(&path)?;
+                commands::install::run_missing(&manifest, &args.backend_args, backend.as_ref())
+            } else {
+                let mut manifest = manifest::Manifest::load(&path)?;
+                commands::install::run_packages(
+                    &mut manifest,
+                    &args.names,
+                    &args.backend_args,
+                    backend.as_ref(),
+                    &path,
+                    &user,
+                )
             }
         }
         cli::Command::Status => {

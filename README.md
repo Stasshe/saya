@@ -2,7 +2,7 @@
 
 OS標準パッケージマネージャ(apt/pacman)の薄いラッパー。chezmoi(dotfiles)、mise(devtools)に対し、OSパッケージの「意図記録」と「再現」だけ担う。
 
-- **意図記録**: `saya install foo`でインストールに成功したパッケージをマニフェストへ記録する。
+- **意図記録**: `saya install foo bar`でインストールに成功したパッケージをマニフェストへ記録する。
 - **一方向適用**: `saya install`(引数なし)でマニフェストにあって未インストールのものだけインストールする。
 - **明示的な削除**: `saya uninstall foo`でアンインストールし、マニフェストからも削除する。
 
@@ -31,6 +31,9 @@ saya self-update           # 最新のGitHub Releaseからsaya本体を更新す
 saya update                # apt-get update / pacman -Sy を実行する
 saya upgrade               # apt-get upgrade / pacman -Syu を実行する
 saya install neovim        # 検出したbackendでインストールし、成功したら記録する
+saya install adb fastboot  # 複数パッケージをまとめてインストールし、成功したら記録する
+saya install neovim -- -C /path/to/pacman.conf
+                           # -- 以降をapt-get / pacmanのinstallへそのまま渡す
 saya install               # マニフェストにあって未インストールのものを入れる(引数なし)
 
 saya status                # マニフェストとインストール状態の差分確認

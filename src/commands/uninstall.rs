@@ -56,7 +56,7 @@ mod tests {
             Ok(self.installed)
         }
 
-        fn install(&self, _real_pkg_names: &[String]) -> Result<()> {
+        fn install(&self, _real_pkg_names: &[String], _backend_args: &[String]) -> Result<()> {
             unreachable!("uninstall command never installs")
         }
 

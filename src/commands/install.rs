@@ -6,8 +6,12 @@ use crate::backend::Backend;
 use crate::manifest::Manifest;
 use crate::privilege::{InvocationUser, drop_to_user};
 
-/// `saya install` with no name: install everything missing from the manifest.
-pub fn run_missing(manifest: &Manifest, backend: &dyn Backend) -> Result<()> {
+/// `saya install` with no names: install everything missing from the manifest.
+pub fn run_missing(
+    manifest: &Manifest,
+    backend_args: &[String],
+    backend: &dyn Backend,
+) -> Result<()> {
     let statuses = super::compute_status(manifest, backend)?;
     let missing: Vec<String> = statuses
         .into_iter()
@@ -21,28 +25,36 @@ pub fn run_missing(manifest: &Manifest, backend: &dyn Backend) -> Result<()> {
     }
 
     println!("installing: {}", missing.join(", "));
-    backend.install(&missing)
+    backend.install(&missing, backend_args)
 }
 
-/// `saya install <name>`: install one package and record it on success.
-pub fn run_named(
+/// `saya install <names...>`: install packages and record them on success.
+pub fn run_packages(
     manifest: &mut Manifest,
-    name: &str,
+    names: &[String],
+    backend_args: &[String],
     backend: &dyn Backend,
     path: &Path,
     user: &InvocationUser,
 ) -> Result<()> {
-    backend.install(std::slice::from_ref(&name.to_string()))?;
+    backend.install(names, backend_args)?;
 
-    if manifest.contains(name, backend.kind()) {
-        println!("already recorded: {name}");
+    let added: Vec<String> = names
+        .iter()
+        .filter(|name| !manifest.contains(name, backend.kind()))
+        .cloned()
+        .collect();
+    if added.is_empty() {
+        println!("already recorded: {}", names.join(", "));
         return Ok(());
     }
 
-    manifest.record(name, backend.kind());
+    for name in &added {
+        manifest.record(name, backend.kind());
+    }
     drop_to_user(user)?;
     manifest.save(path)?;
-    println!("added: {name}");
+    println!("added: {}", added.join(", "));
     Ok(())
 }
 
@@ -57,6 +69,7 @@ mod tests {
     struct FakeBackend {
         installed: Vec<String>,
         expected: Vec<String>,
+        expected_backend_args: Vec<String>,
     }
 
     impl Backend for FakeBackend {
@@ -76,8 +89,9 @@ mod tests {
             Ok(self.installed.iter().any(|name| name == real_pkg_name))
         }
 
-        fn install(&self, real_pkg_names: &[String]) -> Result<()> {
+        fn install(&self, real_pkg_names: &[String], backend_args: &[String]) -> Result<()> {
             assert_eq!(real_pkg_names, self.expected);
+            assert_eq!(backend_args, self.expected_backend_args);
             Ok(())
         }
 
@@ -98,9 +112,10 @@ mod tests {
         let backend = FakeBackend {
             installed: vec!["git".to_string()],
             expected: vec!["curl".to_string()],
+            expected_backend_args: Vec::new(),
         };
 
-        run_missing(&manifest, &backend).unwrap();
+        run_missing(&manifest, &[], &backend).unwrap();
     }
 
     fn current_user(home: std::path::PathBuf) -> InvocationUser {
@@ -113,24 +128,33 @@ mod tests {
     }
 
     #[test]
-    fn run_named_installs_and_records_package() {
+    fn run_packages_installs_and_records_packages() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         let user = current_user(dir.clone());
         let mut manifest = Manifest::default();
         let backend = FakeBackend {
             installed: Vec::new(),
-            expected: vec!["neovim".to_string()],
+            expected: vec!["neovim".to_string(), "git".to_string()],
+            expected_backend_args: vec!["-C".to_string(), "/tmp/pacman.conf".to_string()],
         };
 
-        run_named(&mut manifest, "neovim", &backend, &path, &user).unwrap();
+        run_packages(
+            &mut manifest,
+            &["neovim".to_string(), "git".to_string()],
+            &["-C".to_string(), "/tmp/pacman.conf".to_string()],
+            &backend,
+            &path,
+            &user,
+        )
+        .unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
-        assert_eq!(loaded.apt, vec!["neovim"]);
+        assert_eq!(loaded.apt, vec!["neovim", "git"]);
     }
 
     #[test]
-    fn run_named_keeps_identical_manifest_unchanged() {
+    fn run_packages_keeps_identical_manifest_unchanged() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         let user = current_user(dir.clone());
@@ -141,9 +165,18 @@ mod tests {
         let backend = FakeBackend {
             installed: Vec::new(),
             expected: vec!["neovim".to_string()],
+            expected_backend_args: Vec::new(),
         };
 
-        run_named(&mut manifest, "neovim", &backend, &path, &user).unwrap();
+        run_packages(
+            &mut manifest,
+            &["neovim".to_string()],
+            &[],
+            &backend,
+            &path,
+            &user,
+        )
+        .unwrap();
 
         assert_eq!(std::fs::metadata(path).unwrap().ino(), inode);
     }

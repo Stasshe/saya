@@ -16,7 +16,7 @@ pub trait Backend {
     fn update(&self) -> Result<()>;
     fn upgrade(&self) -> Result<()>;
     fn is_installed(&self, real_pkg_name: &str) -> Result<bool>;
-    fn install(&self, real_pkg_names: &[String]) -> Result<()>;
+    fn install(&self, real_pkg_names: &[String], backend_args: &[String]) -> Result<()>;
     fn uninstall(&self, real_pkg_names: &[String]) -> Result<()>;
     fn list_manually_installed(&self) -> Result<Vec<String>>;
 }

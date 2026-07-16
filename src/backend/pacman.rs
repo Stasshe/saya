@@ -54,13 +54,14 @@ impl Backend for PacmanBackend {
         );
     }
 
-    fn install(&self, real_pkg_names: &[String]) -> Result<()> {
+    fn install(&self, real_pkg_names: &[String], backend_args: &[String]) -> Result<()> {
         if real_pkg_names.is_empty() {
             return Ok(());
         }
         let status = super::package_manager_command("/usr/bin/pacman")
             .arg("-S")
             .arg("--noconfirm")
+            .args(backend_args)
             .arg("--")
             .args(real_pkg_names)
             .status()

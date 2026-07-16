@@ -34,10 +34,13 @@ pub enum Command {
 
 #[derive(Args)]
 pub struct InstallArgs {
-    /// Package name as known to the detected backend, e.g. "neovim".
+    /// Package names as known to the detected backend, e.g. "neovim".
     /// Omit to install everything missing from the manifest.
-    #[arg(value_parser = parse_package_name)]
-    pub name: Option<String>,
+    #[arg(value_name = "PACKAGE", value_parser = parse_package_name)]
+    pub names: Vec<String>,
+    /// Arguments passed unchanged to apt-get or pacman. Must follow `--`.
+    #[arg(last = true, value_name = "ARG", allow_hyphen_values = true)]
+    pub backend_args: Vec<String>,
 }
 
 #[derive(Args)]
@@ -72,18 +75,38 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Command::Install(InstallArgs { name: None })
+            Command::Install(InstallArgs { names, backend_args })
+                if names.is_empty() && backend_args.is_empty()
         ));
     }
 
     #[test]
-    fn install_accepts_a_package_name() {
-        let cli = Cli::try_parse_from(["saya", "install", "git"]).unwrap();
+    fn install_accepts_multiple_package_names() {
+        let cli = Cli::try_parse_from(["saya", "install", "adb", "fastboot"]).unwrap();
 
         assert!(matches!(
             cli.command,
-            Command::Install(InstallArgs { name: Some(name) }) if name == "git"
+            Command::Install(InstallArgs { names, backend_args })
+                if names == ["adb", "fastboot"] && backend_args.is_empty()
         ));
+    }
+
+    #[test]
+    fn install_accepts_backend_arguments_after_separator() {
+        let cli =
+            Cli::try_parse_from(["saya", "install", "neovim", "--", "-C", "/tmp/pacman.conf"])
+                .unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Command::Install(InstallArgs { names, backend_args })
+                if names == ["neovim"] && backend_args == ["-C", "/tmp/pacman.conf"]
+        ));
+    }
+
+    #[test]
+    fn install_requires_separator_before_backend_arguments() {
+        assert!(Cli::try_parse_from(["saya", "install", "neovim", "-C"]).is_err());
     }
 
     #[test]
