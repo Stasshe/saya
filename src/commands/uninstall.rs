@@ -6,8 +6,8 @@ use crate::backend::Backend;
 use crate::manifest::Manifest;
 use crate::privilege::{InvocationUser, drop_to_user};
 
-/// `saya uninstall <name>`: uninstall through the detected backend if
-/// installed, then remove it from the manifest.
+/// `saya uninstall <name>`: uninstall through the detected backend, then
+/// remove it from the manifest.
 pub fn run(
     manifest: &mut Manifest,
     name: &str,
@@ -15,9 +15,7 @@ pub fn run(
     path: &Path,
     user: &InvocationUser,
 ) -> Result<()> {
-    if backend.is_installed(name)? {
-        backend.uninstall(std::slice::from_ref(&name.to_string()))?;
-    }
+    backend.uninstall(std::slice::from_ref(&name.to_string()))?;
 
     if !manifest.remove(name, backend.kind()) {
         println!("uninstalled (was not in manifest): {name}");
@@ -35,9 +33,7 @@ mod tests {
 
     use crate::backend::BackendKind;
 
-    struct FakeBackend {
-        installed: bool,
-    }
+    struct FakeBackend;
 
     impl Backend for FakeBackend {
         fn kind(&self) -> BackendKind {
@@ -53,7 +49,7 @@ mod tests {
         }
 
         fn is_installed(&self, _real_pkg_name: &str) -> Result<bool> {
-            Ok(self.installed)
+            unreachable!("uninstall command never checks installation")
         }
 
         fn install(&self, _real_pkg_names: &[String], _backend_args: &[String]) -> Result<()> {
@@ -89,14 +85,7 @@ mod tests {
         manifest.record("neovim", BackendKind::Pacman);
         manifest.save(&path).unwrap();
 
-        run(
-            &mut manifest,
-            "neovim",
-            &FakeBackend { installed: true },
-            &path,
-            &user,
-        )
-        .unwrap();
+        run(&mut manifest, "neovim", &FakeBackend, &path, &user).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
         assert!(loaded.apt.is_empty());
@@ -104,24 +93,14 @@ mod tests {
     }
 
     #[test]
-    fn skips_uninstall_when_not_installed() {
+    fn uninstalls_when_not_in_manifest() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         let user = current_user(dir.clone());
         let mut manifest = Manifest::default();
-        manifest.record("neovim", BackendKind::Apt);
         manifest.save(&path).unwrap();
 
-        // FakeBackend::uninstall would panic on a mismatched call, so a
-        // successful run here proves it was never invoked.
-        run(
-            &mut manifest,
-            "neovim",
-            &FakeBackend { installed: false },
-            &path,
-            &user,
-        )
-        .unwrap();
+        run(&mut manifest, "neovim", &FakeBackend, &path, &user).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
         assert!(loaded.apt.is_empty());
