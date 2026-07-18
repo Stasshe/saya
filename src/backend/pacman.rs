@@ -77,14 +77,14 @@ impl Backend for PacmanBackend {
             return Ok(());
         }
         let status = super::package_manager_command("/usr/bin/pacman")
-            .arg("-R")
+            .arg("-Rns")
             .arg("--noconfirm")
             .arg("--")
             .args(real_pkg_names)
             .status()
-            .context("running pacman -R")?;
+            .context("running pacman -Rns")?;
         if !status.success() {
-            bail!("pacman -R failed with {status}");
+            bail!("pacman -Rns failed with {status}");
         }
         Ok(())
     }

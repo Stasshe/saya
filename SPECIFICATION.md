@@ -114,7 +114,7 @@ pub trait Backend {
 
 ### commands/uninstall.rs
 
-`saya uninstall <name>` はインストール済みなら検出中backendでアンインストールしたうえで、manifestの該当配列から`name`を削除する。
+`saya uninstall <name>` はインストール済みなら検出中backendでアンインストールしたうえで、manifestの該当配列から`name`を削除する。APT backendは対象を`apt-get remove --purge`で削除後、`apt-get autoremove --purge`で不要な依存パッケージも削除する。pacman backendは`pacman -Rns`を使う。
 
 ### commands/status.rs
 

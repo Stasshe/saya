@@ -78,13 +78,24 @@ impl Backend for AptBackend {
         }
         let status = super::package_manager_command("/usr/bin/apt-get")
             .arg("remove")
+            .arg("--purge")
             .arg("-y")
             .arg("--")
             .args(real_pkg_names)
             .status()
-            .context("running apt-get remove")?;
+            .context("running apt-get remove --purge")?;
         if !status.success() {
-            bail!("apt-get remove failed with {status}");
+            bail!("apt-get remove --purge failed with {status}");
+        }
+
+        let status = super::package_manager_command("/usr/bin/apt-get")
+            .arg("autoremove")
+            .arg("--purge")
+            .arg("-y")
+            .status()
+            .context("running apt-get autoremove --purge")?;
+        if !status.success() {
+            bail!("apt-get autoremove --purge failed with {status}");
         }
         Ok(())
     }

@@ -58,6 +58,7 @@ pacman = [
 
 - apt/pacman間でのパッケージ名の対応付けはしない。`saya install <name>`は今動いているOSのbackend(apt or pacman)を判定し、その配列にだけ名前を追記する。他方のOSにも入れたい場合は、そちらの環境で改めて`saya install <name>`を実行する。
 - 同じアプリでもOSごとにパッケージ名が異なることが多い(例: apt=`build-essential` / pacman=`base-devel`)。この場合は各OSでそのOSのパッケージ名を`install`すればよい。
+- `uninstall`はAPTでは`apt-get remove --purge`後に`apt-get autoremove --purge`、pacmanでは`pacman -Rns`を使う。
 - `saya install`(引数なし)/`saya status`は今動いているOS側の配列だけを見る。
 
 ## リリース手順(開発者向け)
