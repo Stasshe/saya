@@ -34,6 +34,9 @@ pub enum Command {
 
 #[derive(Args)]
 pub struct InstallArgs {
+    /// Accept the familiar package-manager confirmation flag.
+    #[arg(short = 'y')]
+    pub yes: bool,
     /// Package names as known to the detected backend, e.g. "neovim".
     /// Omit to install everything missing from the manifest.
     #[arg(value_name = "PACKAGE", value_parser = parse_package_name)]
@@ -75,8 +78,26 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Command::Install(InstallArgs { names, backend_args })
+            Command::Install(InstallArgs {
+                yes: false,
+                names,
+                backend_args,
+            })
                 if names.is_empty() && backend_args.is_empty()
+        ));
+    }
+
+    #[test]
+    fn install_accepts_yes_before_package_names() {
+        let cli = Cli::try_parse_from(["saya", "install", "-y", "openssh-server"]).unwrap();
+
+        assert!(matches!(
+            cli.command,
+            Command::Install(InstallArgs {
+                yes: true,
+                names,
+                backend_args,
+            }) if names == ["openssh-server"] && backend_args.is_empty()
         ));
     }
 
@@ -86,7 +107,11 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Command::Install(InstallArgs { names, backend_args })
+            Command::Install(InstallArgs {
+                yes: false,
+                names,
+                backend_args,
+            })
                 if names == ["adb", "fastboot"] && backend_args.is_empty()
         ));
     }
@@ -99,7 +124,11 @@ mod tests {
 
         assert!(matches!(
             cli.command,
-            Command::Install(InstallArgs { names, backend_args })
+            Command::Install(InstallArgs {
+                yes: false,
+                names,
+                backend_args,
+            })
                 if names == ["neovim"] && backend_args == ["-C", "/tmp/pacman.conf"]
         ));
     }

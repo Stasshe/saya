@@ -31,6 +31,8 @@ saya self-update           # 最新のGitHub Releaseからsaya本体を更新す
 saya update                # apt-get update / pacman -Sy を実行する
 saya upgrade               # apt-get upgrade / pacman -Syu を実行する
 saya install neovim        # 検出したbackendでインストールし、成功したら記録する
+saya install -y openssh-server
+                           # apt/pacmanと同じ位置の-yも受理する
 saya install adb fastboot  # 複数パッケージをまとめてインストールし、成功したら記録する
 saya install neovim -- -C /path/to/pacman.conf
                            # -- 以降をapt-get / pacmanのinstallへそのまま渡す
@@ -59,6 +61,7 @@ pacman = [
 - apt/pacman間でのパッケージ名の対応付けはしない。`saya install <name>`は今動いているOSのbackend(apt or pacman)を判定し、その配列にだけ名前を追記する。他方のOSにも入れたい場合は、そちらの環境で改めて`saya install <name>`を実行する。
 - 同じアプリでもOSごとにパッケージ名が異なることが多い(例: apt=`build-essential` / pacman=`base-devel`)。この場合は各OSでそのOSのパッケージ名を`install`すればよい。
 - `uninstall`はAPTでは`apt-get remove --purge`後に`apt-get autoremove --purge`、pacmanでは`pacman -Rns`を使う。
+- installは常に非対話で実行する。`-y`はapt/pacmanに慣れた操作との互換用で、省略時も挙動は同じ。
 - `saya install`(引数なし)/`saya status`は今動いているOS側の配列だけを見る。
 
 ## リリース手順(開発者向け)
