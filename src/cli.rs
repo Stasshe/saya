@@ -1,13 +1,18 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand};
 
 use crate::manifest::validate_package_name;
 
 #[derive(Parser)]
 #[command(
     name = "saya",
-    about = "Thin one-way sync wrapper around your OS package manager"
+    about = "Thin one-way sync wrapper around your OS package manager",
+    version,
+    disable_version_flag = true
 )]
 pub struct Cli {
+    /// Print version.
+    #[arg(short = 'v', long = "version", action = ArgAction::Version)]
+    pub version: Option<bool>,
     #[command(subcommand)]
     pub command: Command,
 }
@@ -71,6 +76,22 @@ fn parse_package_name(value: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::error::ErrorKind;
+
+    #[test]
+    fn version_flags_print_package_version() {
+        for flag in ["-v", "--version"] {
+            let error = Cli::try_parse_from(["saya", flag])
+                .err()
+                .expect("version flags should exit after printing the version");
+
+            assert_eq!(error.kind(), ErrorKind::DisplayVersion);
+            assert_eq!(
+                error.to_string(),
+                format!("saya {}\n", env!("CARGO_PKG_VERSION"))
+            );
+        }
+    }
 
     #[test]
     fn install_accepts_no_package_arguments() {

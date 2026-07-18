@@ -27,6 +27,7 @@ cargo install --git https://github.com/Stasshe/saya
 ## 使い方
 
 ```sh
+saya -v                    # saya本体のバージョンを表示する(--versionも可)
 saya self-update           # 最新のGitHub Releaseからsaya本体を更新する
 saya update                # apt-get update / pacman -Sy を実行する
 saya upgrade               # apt-get upgrade / pacman -Syu を実行する
