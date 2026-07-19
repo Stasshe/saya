@@ -1,5 +1,9 @@
 use std::fs;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -51,12 +55,18 @@ impl Manifest {
         if fs::read(path).is_ok_and(|current| current == text.as_bytes()) {
             return Ok(());
         }
-        let tmp_path = path.with_extension("tmp");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("creating manifest dir {}", parent.display()))?;
         }
-        fs::write(&tmp_path, text).with_context(|| format!("writing {}", tmp_path.display()))?;
+        let (tmp_path, mut tmp_file) = create_tempfile(path)?;
+        tmp_file
+            .write_all(text.as_bytes())
+            .with_context(|| format!("writing {}", tmp_path.display()))?;
+        tmp_file
+            .sync_all()
+            .with_context(|| format!("syncing {}", tmp_path.display()))?;
+        drop(tmp_file);
         fs::rename(&tmp_path, path)
             .with_context(|| format!("renaming {} to {}", tmp_path.display(), path.display()))?;
         Ok(())
@@ -115,6 +125,40 @@ impl Manifest {
     }
 }
 
+fn create_tempfile(path: &Path) -> Result<(std::path::PathBuf, fs::File)> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("packages.toml");
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("reading system time")?
+        .as_nanos();
+
+    for attempt in 0..100 {
+        let tmp_path = parent.join(format!(
+            ".{stem}.{}.{}.{attempt}.tmp",
+            std::process::id(),
+            now
+        ));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp_path)
+        {
+            Ok(file) => return Ok((tmp_path, file)),
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => {
+                return Err(err).with_context(|| format!("creating {}", tmp_path.display()));
+            }
+        }
+    }
+
+    anyhow::bail!("could not create manifest tempfile after 100 attempts")
+}
+
 pub fn validate_package_name(name: &str) -> std::result::Result<(), String> {
     if name.is_empty() {
         return Err("package name cannot be empty".to_string());
@@ -167,6 +211,23 @@ mod tests {
         let loaded = Manifest::load(&path).unwrap();
         assert_eq!(loaded, manifest);
         assert!(!path.with_extension("tmp").exists());
+    }
+
+    #[test]
+    fn save_does_not_reuse_fixed_tmp_path() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        let old_fixed_tmp_path = path.with_extension("tmp");
+        std::fs::write(&old_fixed_tmp_path, "do not touch").unwrap();
+
+        let manifest = Manifest::default();
+        manifest.save(&path).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(old_fixed_tmp_path).unwrap(),
+            "do not touch"
+        );
+        assert_eq!(Manifest::load(&path).unwrap(), manifest);
     }
 
     #[test]
@@ -242,6 +303,13 @@ mod tests {
     #[test]
     fn validate_package_name_rejects_path_like_name() {
         assert!(validate_package_name("foo/bar").is_err());
+    }
+
+    #[test]
+    fn validate_package_name_rejects_whitespace_and_control_chars() {
+        assert!(validate_package_name("git curl").is_err());
+        assert!(validate_package_name("git\ncurl").is_err());
+        assert!(validate_package_name("git\tcurl").is_err());
     }
 
     #[test]
