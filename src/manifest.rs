@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -49,6 +50,8 @@ impl Manifest {
             .with_context(|| format!("validating manifest at {}", path.display()))?;
         let text = toml::to_string_pretty(self).context("serializing manifest")?;
         if fs::read(path).is_ok_and(|current| current == text.as_bytes()) {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o644))
+                .with_context(|| format!("setting permissions on {}", path.display()))?;
             return Ok(());
         }
         let tmp_path = path.with_extension("tmp");
@@ -57,6 +60,8 @@ impl Manifest {
                 .with_context(|| format!("creating manifest dir {}", parent.display()))?;
         }
         fs::write(&tmp_path, text).with_context(|| format!("writing {}", tmp_path.display()))?;
+        fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o644))
+            .with_context(|| format!("setting permissions on {}", tmp_path.display()))?;
         fs::rename(&tmp_path, path)
             .with_context(|| format!("renaming {} to {}", tmp_path.display(), path.display()))?;
         Ok(())
@@ -166,6 +171,7 @@ mod tests {
 
         let loaded = Manifest::load(&path).unwrap();
         assert_eq!(loaded, manifest);
+        assert_eq!(std::fs::metadata(&path).unwrap().mode() & 0o777, 0o644);
         assert!(!path.with_extension("tmp").exists());
     }
 
@@ -176,10 +182,12 @@ mod tests {
         let manifest = Manifest::default();
         manifest.save(&path).unwrap();
         let inode = std::fs::metadata(&path).unwrap().ino();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
 
         manifest.save(&path).unwrap();
 
-        assert_eq!(std::fs::metadata(path).unwrap().ino(), inode);
+        assert_eq!(std::fs::metadata(&path).unwrap().ino(), inode);
+        assert_eq!(std::fs::metadata(&path).unwrap().mode() & 0o777, 0o644);
     }
 
     #[test]
