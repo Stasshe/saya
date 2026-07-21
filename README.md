@@ -6,7 +6,7 @@ OS標準パッケージマネージャ(apt/pacman)の薄いラッパー。chezmo
 - **一方向適用**: `saya install`(引数なし)でマニフェストにあって未インストールのものだけインストールする。
 - **明示的な削除**: `saya uninstall foo`でアンインストールし、マニフェストからも削除する。
 
-マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に通常の設定ファイルとして`0644`で保存する。`sudo`経由で実行した場合もrootではなく元ユーザー側に保存する。保存内容が同一ならファイルを書き換えない。
+マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に通常の設定ファイルとして`0644`で保存する。`sudo`経由で実行した場合もrootではなく元ユーザー側に保存する。保存内容が同一なら内容を書き換えず、差分は同じディレクトリの一意な一時ファイルを経由して置き換える。
 
 詳細設計は[SPECIFICATION.md](./SPECIFICATION.md)参照。
 
@@ -27,10 +27,13 @@ cargo install --git https://github.com/Stasshe/saya
 ## 使い方
 
 ```sh
+saya -v                    # saya本体のバージョンを表示する(--versionも可)
 saya self-update           # 最新のGitHub Releaseからsaya本体を更新する
 saya update                # apt-get update / pacman -Sy を実行する
 saya upgrade               # apt-get upgrade / pacman -Syu を実行する
 saya install neovim        # 検出したbackendでインストールし、成功したら記録する
+saya install -y openssh-server
+                           # apt/pacmanと同じ位置の-yも受理する
 saya install adb fastboot  # 複数パッケージをまとめてインストールし、成功したら記録する
 saya install neovim -- -C /path/to/pacman.conf
                            # -- 以降をapt-get / pacmanのinstallへそのまま渡す
@@ -59,6 +62,7 @@ pacman = [
 - apt/pacman間でのパッケージ名の対応付けはしない。`saya install <name>`は今動いているOSのbackend(apt or pacman)を判定し、その配列にだけ名前を追記する。他方のOSにも入れたい場合は、そちらの環境で改めて`saya install <name>`を実行する。
 - 同じアプリでもOSごとにパッケージ名が異なることが多い(例: apt=`build-essential` / pacman=`base-devel`)。この場合は各OSでそのOSのパッケージ名を`install`すればよい。
 - `uninstall`はAPTでは`apt-get remove --purge`後に`apt-get autoremove --purge`、pacmanでは`pacman -Rns`を使う。
+- installは常に非対話で実行する。`-y`はapt/pacmanに慣れた操作との互換用で、省略時も挙動は同じ。
 - `saya install`(引数なし)/`saya status`は今動いているOS側の配列だけを見る。
 
 ## リリース手順(開発者向け)

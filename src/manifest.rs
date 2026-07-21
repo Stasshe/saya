@@ -1,6 +1,9 @@
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -44,7 +47,7 @@ impl Manifest {
         Ok(manifest)
     }
 
-    /// Atomic write: write to a sibling `.tmp` file then rename over the target.
+    /// Atomic write: write to a unique sibling temporary file then rename over the target.
     pub fn save(&self, path: &Path) -> Result<()> {
         self.validate()
             .with_context(|| format!("validating manifest at {}", path.display()))?;
@@ -54,14 +57,21 @@ impl Manifest {
                 .with_context(|| format!("setting permissions on {}", path.display()))?;
             return Ok(());
         }
-        let tmp_path = path.with_extension("tmp");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("creating manifest dir {}", parent.display()))?;
         }
-        fs::write(&tmp_path, text).with_context(|| format!("writing {}", tmp_path.display()))?;
-        fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o644))
+        let (tmp_path, mut tmp_file) = create_tempfile(path)?;
+        tmp_file
+            .write_all(text.as_bytes())
+            .with_context(|| format!("writing {}", tmp_path.display()))?;
+        tmp_file
+            .set_permissions(fs::Permissions::from_mode(0o644))
             .with_context(|| format!("setting permissions on {}", tmp_path.display()))?;
+        tmp_file
+            .sync_all()
+            .with_context(|| format!("syncing {}", tmp_path.display()))?;
+        drop(tmp_file);
         fs::rename(&tmp_path, path)
             .with_context(|| format!("renaming {} to {}", tmp_path.display(), path.display()))?;
         Ok(())
@@ -120,6 +130,40 @@ impl Manifest {
     }
 }
 
+fn create_tempfile(path: &Path) -> Result<(std::path::PathBuf, fs::File)> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let stem = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("packages.toml");
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("reading system time")?
+        .as_nanos();
+
+    for attempt in 0..100 {
+        let tmp_path = parent.join(format!(
+            ".{stem}.{}.{}.{attempt}.tmp",
+            std::process::id(),
+            now
+        ));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp_path)
+        {
+            Ok(file) => return Ok((tmp_path, file)),
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => {
+                return Err(err).with_context(|| format!("creating {}", tmp_path.display()));
+            }
+        }
+    }
+
+    anyhow::bail!("could not create manifest tempfile after 100 attempts")
+}
+
 pub fn validate_package_name(name: &str) -> std::result::Result<(), String> {
     if name.is_empty() {
         return Err("package name cannot be empty".to_string());
@@ -173,6 +217,23 @@ mod tests {
         assert_eq!(loaded, manifest);
         assert_eq!(std::fs::metadata(&path).unwrap().mode() & 0o777, 0o644);
         assert!(!path.with_extension("tmp").exists());
+    }
+
+    #[test]
+    fn save_does_not_reuse_fixed_tmp_path() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        let old_fixed_tmp_path = path.with_extension("tmp");
+        std::fs::write(&old_fixed_tmp_path, "do not touch").unwrap();
+
+        let manifest = Manifest::default();
+        manifest.save(&path).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(old_fixed_tmp_path).unwrap(),
+            "do not touch"
+        );
+        assert_eq!(Manifest::load(&path).unwrap(), manifest);
     }
 
     #[test]
@@ -250,6 +311,13 @@ mod tests {
     #[test]
     fn validate_package_name_rejects_path_like_name() {
         assert!(validate_package_name("foo/bar").is_err());
+    }
+
+    #[test]
+    fn validate_package_name_rejects_whitespace_and_control_chars() {
+        assert!(validate_package_name("git curl").is_err());
+        assert!(validate_package_name("git\ncurl").is_err());
+        assert!(validate_package_name("git\tcurl").is_err());
     }
 
     #[test]
