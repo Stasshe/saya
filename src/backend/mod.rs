@@ -1,6 +1,7 @@
 mod apt;
-mod pacman;
+mod yay;
 
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
@@ -8,7 +9,7 @@ use anyhow::{Context, Result, bail};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
     Apt,
-    Pacman,
+    Yay,
 }
 
 pub trait Backend {
@@ -30,7 +31,17 @@ pub(super) fn package_manager_command(program: &str) -> Command {
 /// Picks a backend by reading `ID`/`ID_LIKE` from `/etc/os-release`.
 pub fn detect_backend() -> Result<Box<dyn Backend>> {
     let text = std::fs::read_to_string("/etc/os-release").context("reading /etc/os-release")?;
-    detect_backend_from_os_release(&text)
+    let backend = detect_backend_from_os_release(&text)?;
+    if backend.kind() == BackendKind::Yay {
+        if !Path::new("/usr/bin/yay").is_file() {
+            bail!("yay is required on Arch-based systems but /usr/bin/yay was not found");
+        }
+        // SAFETY: geteuid takes no arguments and cannot fail.
+        if unsafe { libc::geteuid() } == 0 {
+            bail!("yay must not run as root; run saya without sudo");
+        }
+    }
+    Ok(backend)
 }
 
 fn detect_backend_from_os_release(text: &str) -> Result<Box<dyn Backend>> {
@@ -51,7 +62,7 @@ fn detect_backend_from_os_release(text: &str) -> Result<Box<dyn Backend>> {
         return Ok(Box::new(apt::AptBackend));
     }
     if haystack.split_whitespace().any(|tok| tok == "arch") {
-        return Ok(Box::new(pacman::PacmanBackend));
+        return Ok(Box::new(yay::YayBackend));
     }
     bail!("unsupported distro (ID={id}, ID_LIKE={id_like})");
 }
@@ -82,7 +93,7 @@ mod tests {
     fn detects_arch() {
         let os_release = "ID=arch\n";
         let backend = detect_backend_from_os_release(os_release).unwrap();
-        assert_eq!(backend.kind(), BackendKind::Pacman);
+        assert_eq!(backend.kind(), BackendKind::Yay);
     }
 
     #[test]

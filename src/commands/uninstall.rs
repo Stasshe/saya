@@ -82,14 +82,14 @@ mod tests {
         let user = current_user(dir.clone());
         let mut manifest = Manifest::default();
         manifest.record("neovim", BackendKind::Apt);
-        manifest.record("neovim", BackendKind::Pacman);
+        manifest.record("neovim", BackendKind::Yay);
         manifest.save(&path).unwrap();
 
         run(&mut manifest, "neovim", &FakeBackend, &path, &user).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
         assert!(loaded.apt.is_empty());
-        assert_eq!(loaded.pacman, vec!["neovim"]);
+        assert_eq!(loaded.yay, vec!["neovim"]);
     }
 
     #[test]

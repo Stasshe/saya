@@ -46,7 +46,7 @@ pub struct InstallArgs {
     /// Omit to install everything missing from the manifest.
     #[arg(value_name = "PACKAGE", value_parser = parse_package_name)]
     pub names: Vec<String>,
-    /// Arguments passed unchanged to apt-get or pacman. Must follow `--`.
+    /// Arguments passed unchanged to apt-get or yay. Must follow `--`.
     #[arg(last = true, value_name = "ARG", allow_hyphen_values = true)]
     pub backend_args: Vec<String>,
 }
@@ -139,9 +139,15 @@ mod tests {
 
     #[test]
     fn install_accepts_backend_arguments_after_separator() {
-        let cli =
-            Cli::try_parse_from(["saya", "install", "neovim", "--", "-C", "/tmp/pacman.conf"])
-                .unwrap();
+        let cli = Cli::try_parse_from([
+            "saya",
+            "install",
+            "neovim",
+            "--",
+            "--config",
+            "/tmp/yay.conf",
+        ])
+        .unwrap();
 
         assert!(matches!(
             cli.command,
@@ -150,7 +156,7 @@ mod tests {
                 names,
                 backend_args,
             })
-                if names == ["neovim"] && backend_args == ["-C", "/tmp/pacman.conf"]
+                if names == ["neovim"] && backend_args == ["--config", "/tmp/yay.conf"]
         ));
     }
 

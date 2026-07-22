@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendKind;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 3;
+pub const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -19,7 +19,7 @@ pub struct Manifest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub apt: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pacman: Vec<String>,
+    pub yay: Vec<String>,
 }
 
 impl Default for Manifest {
@@ -27,7 +27,7 @@ impl Default for Manifest {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
             apt: Vec::new(),
-            pacman: Vec::new(),
+            yay: Vec::new(),
         }
     }
 }
@@ -80,14 +80,14 @@ impl Manifest {
     pub fn names(&self, kind: BackendKind) -> &[String] {
         match kind {
             BackendKind::Apt => &self.apt,
-            BackendKind::Pacman => &self.pacman,
+            BackendKind::Yay => &self.yay,
         }
     }
 
     fn names_mut(&mut self, kind: BackendKind) -> &mut Vec<String> {
         match kind {
             BackendKind::Apt => &mut self.apt,
-            BackendKind::Pacman => &mut self.pacman,
+            BackendKind::Yay => &mut self.yay,
         }
     }
 
@@ -121,7 +121,7 @@ impl Manifest {
             );
         }
 
-        for name in self.apt.iter().chain(self.pacman.iter()) {
+        for name in self.apt.iter().chain(self.yay.iter()) {
             validate_package_name(name)
                 .map_err(anyhow::Error::msg)
                 .with_context(|| format!("invalid package name {name:?}"))?;
@@ -210,7 +210,7 @@ mod tests {
         let path = dir.join("packages.toml");
         let mut manifest = Manifest::default();
         manifest.record("git", BackendKind::Apt);
-        manifest.record("neovim", BackendKind::Pacman);
+        manifest.record("neovim", BackendKind::Yay);
         manifest.save(&path).unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
@@ -264,18 +264,18 @@ mod tests {
         let mut manifest = Manifest::default();
         manifest.record("neovim", BackendKind::Apt);
         assert!(manifest.contains("neovim", BackendKind::Apt));
-        assert!(!manifest.contains("neovim", BackendKind::Pacman));
+        assert!(!manifest.contains("neovim", BackendKind::Yay));
     }
 
     #[test]
     fn remove_removes_only_from_matching_backend() {
         let mut manifest = Manifest::default();
         manifest.record("neovim", BackendKind::Apt);
-        manifest.record("neovim", BackendKind::Pacman);
+        manifest.record("neovim", BackendKind::Yay);
 
         assert!(manifest.remove("neovim", BackendKind::Apt));
         assert!(!manifest.contains("neovim", BackendKind::Apt));
-        assert!(manifest.contains("neovim", BackendKind::Pacman));
+        assert!(manifest.contains("neovim", BackendKind::Yay));
     }
 
     #[test]
@@ -299,6 +299,15 @@ mod tests {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         std::fs::write(&path, "schema_version = 2\n[packages.git]\napt = []\n").unwrap();
+
+        assert!(Manifest::load(&path).is_err());
+    }
+
+    #[test]
+    fn load_rejects_pacman_manifest() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        std::fs::write(&path, "schema_version = 4\npacman = [\"git\"]\n").unwrap();
 
         assert!(Manifest::load(&path).is_err());
     }

@@ -136,13 +136,13 @@ mod tests {
         let backend = FakeBackend {
             installed: Vec::new(),
             expected: vec!["neovim".to_string(), "git".to_string()],
-            expected_backend_args: vec!["-C".to_string(), "/tmp/pacman.conf".to_string()],
+            expected_backend_args: vec!["--config".to_string(), "/tmp/yay.conf".to_string()],
         };
 
         run_packages(
             &mut manifest,
             &["neovim".to_string(), "git".to_string()],
-            &["-C".to_string(), "/tmp/pacman.conf".to_string()],
+            &["--config".to_string(), "/tmp/yay.conf".to_string()],
             &backend,
             &path,
             &user,
