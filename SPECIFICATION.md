@@ -53,6 +53,8 @@ saya/
 └── src/
     ├── main.rs
     ├── cli.rs
+    ├── cli/
+    │   └── tests.rs
     ├── manifest.rs
     ├── privilege.rs
     ├── backend/
