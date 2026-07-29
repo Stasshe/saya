@@ -52,6 +52,7 @@ fn run_saya_cli() -> Result<()> {
             let backend = backend::detect_backend()?;
             commands::status::run(&manifest, backend.as_ref())
         }
+        cli::Command::Migrate => commands::migrate::run(&path, &user),
         cli::Command::Uninstall(args) => {
             let mut manifest = manifest::Manifest::load(&path)?;
             let backend = backend::detect_backend()?;

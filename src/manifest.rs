@@ -29,6 +29,22 @@ pub struct Manifest {
     pub yay: PackageSet,
 }
 
+#[derive(Deserialize)]
+struct SchemaHeader {
+    schema_version: u32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreviousManifest {
+    #[serde(rename = "schema_version")]
+    _schema_version: u32,
+    #[serde(default)]
+    apt: Vec<String>,
+    #[serde(default)]
+    yay: Vec<String>,
+}
+
 impl Default for Manifest {
     fn default() -> Self {
         Self {
@@ -51,6 +67,39 @@ impl Manifest {
         manifest
             .validate()
             .with_context(|| format!("validating manifest at {}", path.display()))?;
+        Ok(manifest)
+    }
+
+    pub fn load_previous(path: &Path) -> Result<Self> {
+        let text = fs::read_to_string(path)
+            .with_context(|| format!("reading manifest at {}", path.display()))?;
+        let header: SchemaHeader = toml::from_str(&text)
+            .with_context(|| format!("reading manifest schema at {}", path.display()))?;
+        let previous_version = CURRENT_SCHEMA_VERSION - 1;
+        if header.schema_version != previous_version {
+            anyhow::bail!(
+                "cannot migrate schema_version {}; expected {}",
+                header.schema_version,
+                previous_version
+            );
+        }
+
+        let previous: PreviousManifest = toml::from_str(&text)
+            .with_context(|| format!("parsing schema {previous_version} manifest"))?;
+        let manifest = Self {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            apt: PackageSet {
+                present: previous.apt,
+                absent: Vec::new(),
+            },
+            yay: PackageSet {
+                present: previous.yay,
+                absent: Vec::new(),
+            },
+        };
+        manifest
+            .validate()
+            .context("validating migrated manifest")?;
         Ok(manifest)
     }
 
@@ -352,6 +401,36 @@ mod tests {
 
         let err = Manifest::load(&path).unwrap_err().to_string();
         assert!(err.contains("validating manifest"));
+    }
+
+    #[test]
+    fn loads_previous_schema_into_present_lists() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        std::fs::write(
+            &path,
+            "schema_version = 4\napt = [\"git\"]\nyay = [\"neovim\"]\n",
+        )
+        .unwrap();
+
+        let manifest = Manifest::load_previous(&path).unwrap();
+
+        assert_eq!(manifest.schema_version, 5);
+        assert_eq!(manifest.apt.present, vec!["git"]);
+        assert!(manifest.apt.absent.is_empty());
+        assert_eq!(manifest.yay.present, vec!["neovim"]);
+        assert!(manifest.yay.absent.is_empty());
+    }
+
+    #[test]
+    fn migration_rejects_non_previous_schema() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        std::fs::write(&path, "schema_version = 3\napt = []\nyay = []\n").unwrap();
+
+        let err = Manifest::load_previous(&path).unwrap_err().to_string();
+
+        assert!(err.contains("cannot migrate schema_version 3; expected 4"));
     }
 
     #[test]

@@ -14,6 +14,7 @@ sayaは大規模統合パッケージマネージャではなく、APT/yayに以
 
 - **明示的な install/uninstall**: apt/yay の shim や自動キャプチャは作らない。パッケージ追加・削除は `saya install <package>` / `saya uninstall <package>` で明示する。
 - **削除意図の永続化**: manifest未記載は管理対象外とし、OS標準パッケージを削除対象にしない。明示的にuninstallした名前だけを`absent`へ残し、別環境でも削除状態を再現する。不要になった意図はmanifestから手動で消す。
+- **明示的なschema移行**: 起動時には移行しない。`saya migrate`だけが直前のschemaを現在のschemaへ一段階移行する。複数世代の互換処理は保持しない。
 - **install/addの統合**: 当初`saya add <package>`(install+記録)と`saya install`(一括反映)を別コマンドにしていたが、名前が近く役割も「install系」で揃うため統合した。npm(`npm install`=lockfile一括、`npm install <pkg...>`=追加)と同じ、引数の有無で挙動を切り替える形にした。`saya uninstall`は対称に見えるが「一括アンインストール」という概念が元々ないため、名前は常に必須。
 - **backend引数の境界**: `saya install <package...> -- <arg...>`の`--`以降は、解釈・保存せず検出中backendのinstallへ渡す。値を取るオプションとパッケージ名を推測で区別せず、任意のapt-get/yayオプションを扱える明示境界とする。
 - **非対話install**: installは常にAPTへ`-y`、yayへ`--noconfirm`を渡す。`saya install -y <package...>`も同じ非対話操作として受理する。
@@ -22,7 +23,7 @@ sayaは大規模統合パッケージマネージャではなく、APT/yayに以
 - **root書き込み回避**: rootでユーザーhome配下へmanifestを書かない。manifest保存前に元ユーザーへ権限を落としてから書き込む。
 - **Arch backend**: yayで公式リポジトリとAURを一括管理する。pacmanとのbackend分割はしない。`/usr/bin/yay`未導入時はエラーにする。
 - **マニフェスト書き込み**: `0644`で保存する。保存内容が既存ファイルと同一なら内容を書き換えず、権限のみ補正する。差分があれば同じディレクトリに一意なtmpファイルを排他的に作成し、`0644`へ変更して書き込みを同期してからrenameする。file lockingは作らない。
-- **backend間の論理名共有を撤廃**: Ubuntu/Arch間で共有できるpackage名が少ないため、apt/yayごとに独立した`present`/`absent`を持つ。package名は検出中backendへそのまま記録する。schema_versionは5とし、旧形式との後方互換・移行は作らない。
+- **backend間の論理名共有を撤廃**: Ubuntu/Arch間で共有できるpackage名が少ないため、apt/yayごとに独立した`present`/`absent`を持つ。package名は検出中backendへそのまま記録する。schema_versionは5とし、通常の読み込みに旧形式との後方互換は持たせない。
 
 ## アーキテクチャ概要
 
@@ -38,6 +39,7 @@ saya install <package...>   -> install through detected backend, then record
 saya install -y <package...> -> accept the familiar non-interactive form
 saya install <package...> -- <arg...> -> pass native install arguments through
 saya status                 -> show install status
+saya migrate                -> migrate the previous manifest schema
 saya uninstall <package...> -> uninstall through detected backend, then record absent
 saya import --manual        -> list or import manually-installed packages
 ```
@@ -65,6 +67,7 @@ saya/
     └── commands/
         ├── mod.rs
         ├── install.rs
+        ├── migrate.rs
         ├── uninstall.rs
         ├── status.rs
         └── import.rs
@@ -127,6 +130,10 @@ pub trait Backend {
 
 `saya uninstall <name...>` はmanifestへの記録や事前のインストール判定にかかわらず、全指定パッケージを検出中backendで一度にアンインストールする。成功後に`present`から除いて`absent`へ記録する。APT backendは対象を`apt-get remove --purge`で削除後、`apt-get autoremove --purge`で不要な依存パッケージも削除する。yay backendは`yay -Rns`を使う。
 
+### commands/migrate.rs
+
+`saya migrate`は現在schemaの直前だけを読み込み、現在形式へ変換して同じmanifestへ保存する。schema 4から5では従来のapt/yay配列を各`present`へ移し、`absent`を空にする。対象外schemaと不正な旧形式は書き換えずエラーにする。
+
 ### commands/status.rs
 
 検出中backendの`present`/`absent`と現在のインストール状態を表示する。変更はしない。
@@ -140,6 +147,7 @@ pub trait Backend {
 **自動(cargo test、root不要)**:
 
 - manifest の load/save、present/absent排他、既存記録判定
+- 直前schemaからのmanifest移行・対象外schemaの拒否
 - distro backend 判定
 - apt manual list パース
 - privilege の passwd lookup

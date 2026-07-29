@@ -30,6 +30,8 @@ pub enum Command {
     Install(InstallArgs),
     /// Show manifest packages and whether their desired state is applied.
     Status,
+    /// Migrate the manifest from the previous schema version.
+    Migrate,
     /// Uninstall packages and record them as absent.
     Uninstall(UninstallArgs),
     /// List manually-installed packages not yet in the manifest.

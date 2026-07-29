@@ -148,6 +148,13 @@ fn uninstall_requires_package_names() {
 }
 
 #[test]
+fn migrate_accepts_no_arguments() {
+    let cli = Cli::try_parse_from(["saya", "migrate"]).unwrap();
+    assert!(matches!(cli.command, Command::Migrate));
+    assert!(Cli::try_parse_from(["saya", "migrate", "extra"]).is_err());
+}
+
+#[test]
 fn apply_command_is_not_available() {
     assert!(Cli::try_parse_from(["saya", "apply"]).is_err());
 }

@@ -40,6 +40,7 @@ saya install neovim -- --config /path/to/pacman.conf
 saya install               # presentの不足分を入れ、absentの導入済みパッケージを消す
 
 saya status                # マニフェストとインストール状態の差分確認
+saya migrate               # 直前のmanifest schemaから現在のschemaへ移行する
 saya uninstall neovim git  # アンインストールし、absentへ記録する
 ```
 
@@ -61,7 +62,7 @@ absent = ["nano"]
 
 `present`は導入するパッケージ、`absent`は明示的に削除状態を維持するパッケージ。同じ名前を両方には書けない。どちらからも名前を消すと、そのパッケージは管理対象外になる。
 
-schema 4から更新する場合は`schema_version = 5`へ変更し、従来の`apt`/`yay`配列を各backendの`present`へ移す。自動移行はしない。
+schema 4から更新する場合は`saya migrate`を実行する。従来の`apt`/`yay`配列を各backendの`present`へ移す。移行対象は直前のschemaだけで、起動時の自動移行はしない。
 
 - apt/yay間でのパッケージ名の対応付けはしない。`saya install <name>`/`saya uninstall <name>`は今動いているOSのbackendだけを更新する。他方のOSにも適用したい場合は、そちらの環境で改めて実行する。
 - Arch系では公式リポジトリとAURの両方をyayで扱う。`/usr/bin/yay`が必要で、sayaはsudoを付けずに実行する。
