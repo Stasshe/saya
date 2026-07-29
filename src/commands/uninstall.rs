@@ -6,24 +6,33 @@ use crate::backend::Backend;
 use crate::manifest::Manifest;
 use crate::privilege::{InvocationUser, drop_to_user};
 
-/// `saya uninstall <name>`: uninstall through the detected backend, then
-/// remove it from the manifest.
+/// `saya uninstall <names...>`: uninstall through the detected backend, then
+/// remove the packages from the manifest.
 pub fn run(
     manifest: &mut Manifest,
-    name: &str,
+    names: &[String],
     backend: &dyn Backend,
     path: &Path,
     user: &InvocationUser,
 ) -> Result<()> {
-    backend.uninstall(std::slice::from_ref(&name.to_string()))?;
+    backend.uninstall(names)?;
 
-    if !manifest.remove(name, backend.kind()) {
-        println!("uninstalled (was not in manifest): {name}");
+    let removed: Vec<&str> = names
+        .iter()
+        .filter_map(|name| {
+            manifest
+                .remove(name, backend.kind())
+                .then_some(name.as_str())
+        })
+        .collect();
+    if removed.is_empty() {
+        println!("uninstalled (were not in manifest): {}", names.join(", "));
         return Ok(());
     }
+
     drop_to_user(user)?;
     manifest.save(path)?;
-    println!("removed: {name}");
+    println!("removed: {}", removed.join(", "));
     Ok(())
 }
 
@@ -33,7 +42,9 @@ mod tests {
 
     use crate::backend::BackendKind;
 
-    struct FakeBackend;
+    struct FakeBackend {
+        expected: Vec<String>,
+    }
 
     impl Backend for FakeBackend {
         fn kind(&self) -> BackendKind {
@@ -57,7 +68,7 @@ mod tests {
         }
 
         fn uninstall(&self, real_pkg_names: &[String]) -> Result<()> {
-            assert_eq!(real_pkg_names, ["neovim".to_string()]);
+            assert_eq!(real_pkg_names, self.expected);
             Ok(())
         }
 
@@ -82,10 +93,21 @@ mod tests {
         let user = current_user(dir.clone());
         let mut manifest = Manifest::default();
         manifest.record("neovim", BackendKind::Apt);
+        manifest.record("git", BackendKind::Apt);
         manifest.record("neovim", BackendKind::Yay);
         manifest.save(&path).unwrap();
+        let backend = FakeBackend {
+            expected: vec!["neovim".to_string(), "git".to_string()],
+        };
 
-        run(&mut manifest, "neovim", &FakeBackend, &path, &user).unwrap();
+        run(
+            &mut manifest,
+            &["neovim".to_string(), "git".to_string()],
+            &backend,
+            &path,
+            &user,
+        )
+        .unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
         assert!(loaded.apt.is_empty());
@@ -99,8 +121,18 @@ mod tests {
         let user = current_user(dir.clone());
         let mut manifest = Manifest::default();
         manifest.save(&path).unwrap();
+        let backend = FakeBackend {
+            expected: vec!["neovim".to_string(), "git".to_string()],
+        };
 
-        run(&mut manifest, "neovim", &FakeBackend, &path, &user).unwrap();
+        run(
+            &mut manifest,
+            &["neovim".to_string(), "git".to_string()],
+            &backend,
+            &path,
+            &user,
+        )
+        .unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
         assert!(loaded.apt.is_empty());

@@ -1,7 +1,7 @@
 use clap::Parser;
 use clap::error::ErrorKind;
 
-use super::{Cli, Command, InstallArgs};
+use super::{Cli, Command, InstallArgs, UninstallArgs};
 
 #[test]
 fn version_flags_print_package_version() {
@@ -136,9 +136,15 @@ fn install_requires_separator_before_backend_arguments() {
 }
 
 #[test]
-fn uninstall_requires_a_package_name() {
+fn uninstall_requires_package_names() {
     assert!(Cli::try_parse_from(["saya", "uninstall"]).is_err());
-    assert!(Cli::try_parse_from(["saya", "uninstall", "git"]).is_ok());
+
+    let cli = Cli::try_parse_from(["saya", "uninstall", "git", "neovim"]).unwrap();
+    assert!(matches!(
+        cli.command,
+        Command::Uninstall(UninstallArgs { names })
+            if names == ["git", "neovim"]
+    ));
 }
 
 #[test]

@@ -4,7 +4,7 @@ APT/yayの薄いラッパー。chezmoi(dotfiles)、mise(devtools)に対し、OS�
 
 - **意図記録**: `saya install foo bar`でインストールに成功したパッケージをマニフェストへ記録する。
 - **一方向適用**: `saya install`(引数なし)でマニフェストにあって未インストールのものだけインストールする。
-- **明示的な削除**: `saya uninstall foo`でアンインストールし、マニフェストからも削除する。
+- **明示的な削除**: `saya uninstall foo bar`でアンインストールし、マニフェストからも削除する。
 
 マニフェストは実行ユーザーの`~/.config/saya/packages.toml`に通常の設定ファイルとして`0644`で保存する。APT環境で`sudo`経由ならrootではなく元ユーザー側に保存する。保存内容が同一なら内容を書き換えず、差分は同じディレクトリの一意な一時ファイルを経由して置き換える。
 
@@ -40,7 +40,7 @@ saya install neovim -- --config /path/to/pacman.conf
 saya install               # マニフェストにあって未インストールのものを入れる(引数なし)
 
 saya status                # マニフェストとインストール状態の差分確認
-saya uninstall neovim      # アンインストールし、マニフェストから削除する
+saya uninstall neovim git  # 複数パッケージをアンインストールし、マニフェストから削除する
 ```
 
 ## マニフェスト
@@ -64,7 +64,7 @@ schema 3から更新する場合は`schema_version = 4`へ変更し、`pacman`�
 - apt/yay間でのパッケージ名の対応付けはしない。`saya install <name>`は今動いているOSのbackend(apt or yay)を判定し、その配列にだけ名前を追記する。他方のOSにも入れたい場合は、そちらの環境で改めて`saya install <name>`を実行する。
 - Arch系では公式リポジトリとAURの両方をyayで扱う。`/usr/bin/yay`が必要で、sayaはsudoを付けずに実行する。
 - 同じアプリでもOSごとにパッケージ名が異なることが多い(例: apt=`build-essential` / yay=`base-devel`)。この場合は各OSでそのOSのパッケージ名を`install`すればよい。
-- `uninstall`はAPTでは`apt-get remove --purge`後に`apt-get autoremove --purge`、yayでは`yay -Rns`を使う。
+- `uninstall`は複数パッケージをまとめて処理する。APTでは`apt-get remove --purge`後に`apt-get autoremove --purge`、yayでは`yay -Rns`を使う。
 - installは常に非対話で実行する。`-y`はapt/yayに慣れた操作との互換用で、省略時も挙動は同じ。
 - Arch系では`saya`を一般ユーザーとして実行する。`sudo saya ...`はAURビルドをrootで実行しないため拒否する。
 - `saya install`(引数なし)/`saya status`は今動いているOS側の配列だけを見る。

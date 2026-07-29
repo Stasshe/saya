@@ -31,7 +31,7 @@ pub enum Command {
     Install(InstallArgs),
     /// Show which manifest packages are installed/missing without installing.
     Status,
-    /// Uninstall a package and remove it from the manifest.
+    /// Uninstall packages and remove them from the manifest.
     Uninstall(UninstallArgs),
     /// List manually-installed packages not yet in the manifest.
     Import(ImportArgs),
@@ -53,9 +53,9 @@ pub struct InstallArgs {
 
 #[derive(Args)]
 pub struct UninstallArgs {
-    /// Package name to uninstall and remove from the manifest.
-    #[arg(value_parser = parse_package_name)]
-    pub name: String,
+    /// Package names to uninstall and remove from the manifest.
+    #[arg(value_name = "PACKAGE", value_parser = parse_package_name, required = true)]
+    pub names: Vec<String>,
 }
 
 #[derive(Args)]

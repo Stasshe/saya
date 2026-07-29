@@ -8,7 +8,7 @@ sayaは大規模統合パッケージマネージャではなく、APT/yayに以
 
 - **意図記録**: `saya install foo bar`でインストールに成功したパッケージをマニフェストへ記録する。
 - **一方向適用**: `saya install`(引数なし)でマニフェストにあって未インストールのものだけインストールする。
-- **明示的な削除**: `saya uninstall foo`でアンインストールし、マニフェストからも削除する。
+- **明示的な削除**: `saya uninstall foo bar`でアンインストールし、マニフェストからも削除する。
 
 ## 設計判断
 
@@ -37,7 +37,7 @@ saya install <package...>   -> install through detected backend, then record
 saya install -y <package...> -> accept the familiar non-interactive form
 saya install <package...> -- <arg...> -> pass native install arguments through
 saya status                 -> show install status
-saya uninstall <package>    -> uninstall through detected backend, then remove from manifest
+saya uninstall <package...> -> uninstall through detected backend, then remove from manifest
 saya import --manual        -> list or import manually-installed packages
 ```
 
@@ -120,7 +120,7 @@ pub trait Backend {
 
 ### commands/uninstall.rs
 
-`saya uninstall <name>` はmanifestへの記録や事前のインストール判定にかかわらず、検出中backendでアンインストールを実行してからmanifestの該当配列から`name`を削除する。APT backendは対象を`apt-get remove --purge`で削除後、`apt-get autoremove --purge`で不要な依存パッケージも削除する。yay backendは`yay -Rns`を使う。
+`saya uninstall <name...>` はmanifestへの記録や事前のインストール判定にかかわらず、全指定パッケージを検出中backendで一度にアンインストールしてからmanifestの該当配列から削除する。APT backendは対象を`apt-get remove --purge`で削除後、`apt-get autoremove --purge`で不要な依存パッケージも削除する。yay backendは`yay -Rns`を使う。
 
 ### commands/status.rs
 
@@ -139,7 +139,7 @@ manifest と現在のインストール状態を表示する。インストー�
 - apt manual list パース
 - privilege の passwd lookup
 - install command(複数指定/manifest一括)の成功時記録・未導入パッケージ抽出・`-y`・backend引数境界
-- uninstall command の常時backend実行・manifest削除
+- uninstall command の複数指定・常時backend実行・manifest削除
 - manifest保存内容が同一の場合の無変更
 
 **手動確認が必要**:
