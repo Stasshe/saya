@@ -34,7 +34,7 @@ fn run_saya_cli() -> Result<()> {
             let backend = backend::detect_backend()?;
             if args.names.is_empty() {
                 let manifest = manifest::Manifest::load(&path)?;
-                commands::install::run_missing(&manifest, &args.backend_args, backend.as_ref())
+                commands::install::run_manifest(&manifest, &args.backend_args, backend.as_ref())
             } else {
                 let mut manifest = manifest::Manifest::load(&path)?;
                 commands::install::run_packages(

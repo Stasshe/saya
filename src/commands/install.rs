@@ -6,26 +6,38 @@ use crate::backend::Backend;
 use crate::manifest::Manifest;
 use crate::privilege::{InvocationUser, drop_to_user};
 
-/// `saya install` with no names: install everything missing from the manifest.
-pub fn run_missing(
+/// `saya install` with no names: apply every present/absent manifest entry.
+pub fn run_manifest(
     manifest: &Manifest,
     backend_args: &[String],
     backend: &dyn Backend,
 ) -> Result<()> {
     let statuses = super::compute_status(manifest, backend)?;
     let missing: Vec<String> = statuses
+        .iter()
+        .filter(|status| status.desired_present && !status.installed)
+        .map(|status| status.name.clone())
+        .collect();
+    let installed_but_absent: Vec<String> = statuses
         .into_iter()
-        .filter(|status| !status.installed)
+        .filter(|status| !status.desired_present && status.installed)
         .map(|status| status.name)
         .collect();
 
-    if missing.is_empty() {
+    if missing.is_empty() && installed_but_absent.is_empty() {
         println!("already up to date");
         return Ok(());
     }
 
-    println!("installing: {}", missing.join(", "));
-    backend.install(&missing, backend_args)
+    if !missing.is_empty() {
+        println!("installing: {}", missing.join(", "));
+        backend.install(&missing, backend_args)?;
+    }
+    if !installed_but_absent.is_empty() {
+        println!("uninstalling: {}", installed_but_absent.join(", "));
+        backend.uninstall(&installed_but_absent)?;
+    }
+    Ok(())
 }
 
 /// `saya install <names...>`: install packages and record them on success.
@@ -69,6 +81,7 @@ mod tests {
     struct FakeBackend {
         installed: Vec<String>,
         expected: Vec<String>,
+        expected_uninstall: Vec<String>,
         expected_backend_args: Vec<String>,
     }
 
@@ -95,8 +108,9 @@ mod tests {
             Ok(())
         }
 
-        fn uninstall(&self, _real_pkg_names: &[String]) -> Result<()> {
-            unreachable!("install command never uninstalls")
+        fn uninstall(&self, real_pkg_names: &[String]) -> Result<()> {
+            assert_eq!(real_pkg_names, self.expected_uninstall);
+            Ok(())
         }
 
         fn list_manually_installed(&self) -> Result<Vec<String>> {
@@ -112,10 +126,26 @@ mod tests {
         let backend = FakeBackend {
             installed: vec!["git".to_string()],
             expected: vec!["curl".to_string()],
+            expected_uninstall: Vec::new(),
             expected_backend_args: Vec::new(),
         };
 
-        run_missing(&manifest, &[], &backend).unwrap();
+        run_manifest(&manifest, &[], &backend).unwrap();
+    }
+
+    #[test]
+    fn uninstalls_present_packages_recorded_absent() {
+        let mut manifest = Manifest::default();
+        manifest.record_absent("nano", BackendKind::Apt);
+        manifest.record_absent("vim", BackendKind::Apt);
+        let backend = FakeBackend {
+            installed: vec!["nano".to_string()],
+            expected: Vec::new(),
+            expected_uninstall: vec!["nano".to_string()],
+            expected_backend_args: Vec::new(),
+        };
+
+        run_manifest(&manifest, &[], &backend).unwrap();
     }
 
     fn current_user(home: std::path::PathBuf) -> InvocationUser {
@@ -133,9 +163,11 @@ mod tests {
         let path = dir.join("packages.toml");
         let user = current_user(dir.clone());
         let mut manifest = Manifest::default();
+        manifest.record_absent("neovim", BackendKind::Apt);
         let backend = FakeBackend {
             installed: Vec::new(),
             expected: vec!["neovim".to_string(), "git".to_string()],
+            expected_uninstall: Vec::new(),
             expected_backend_args: vec!["--config".to_string(), "/tmp/yay.conf".to_string()],
         };
 
@@ -150,7 +182,8 @@ mod tests {
         .unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
-        assert_eq!(loaded.apt, vec!["neovim", "git"]);
+        assert_eq!(loaded.apt.present, vec!["neovim", "git"]);
+        assert!(loaded.apt.absent.is_empty());
     }
 
     #[test]
@@ -165,6 +198,7 @@ mod tests {
         let backend = FakeBackend {
             installed: Vec::new(),
             expected: vec!["neovim".to_string()],
+            expected_uninstall: Vec::new(),
             expected_backend_args: Vec::new(),
         };
 

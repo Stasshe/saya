@@ -7,7 +7,7 @@ use crate::manifest::Manifest;
 use crate::privilege::{InvocationUser, drop_to_user};
 
 /// `saya uninstall <names...>`: uninstall through the detected backend, then
-/// remove the packages from the manifest.
+/// record the packages as desired absent.
 pub fn run(
     manifest: &mut Manifest,
     names: &[String],
@@ -17,22 +17,22 @@ pub fn run(
 ) -> Result<()> {
     backend.uninstall(names)?;
 
-    let removed: Vec<&str> = names
+    let newly_absent: Vec<&str> = names
         .iter()
-        .filter_map(|name| {
-            manifest
-                .remove(name, backend.kind())
-                .then_some(name.as_str())
-        })
+        .filter(|name| !manifest.is_absent(name, backend.kind()))
+        .map(String::as_str)
         .collect();
-    if removed.is_empty() {
-        println!("uninstalled (were not in manifest): {}", names.join(", "));
+    if newly_absent.is_empty() {
+        println!("already recorded absent: {}", names.join(", "));
         return Ok(());
     }
 
+    for name in names {
+        manifest.record_absent(name, backend.kind());
+    }
     drop_to_user(user)?;
     manifest.save(path)?;
-    println!("removed: {}", removed.join(", "));
+    println!("recorded absent: {}", newly_absent.join(", "));
     Ok(())
 }
 
@@ -87,7 +87,7 @@ mod tests {
     }
 
     #[test]
-    fn uninstalls_and_removes_from_current_backend_only() {
+    fn uninstalls_and_records_absent_for_current_backend_only() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
         let user = current_user(dir.clone());
@@ -110,8 +110,9 @@ mod tests {
         .unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
-        assert!(loaded.apt.is_empty());
-        assert_eq!(loaded.yay, vec!["neovim"]);
+        assert!(loaded.apt.present.is_empty());
+        assert_eq!(loaded.apt.absent, vec!["neovim", "git"]);
+        assert_eq!(loaded.yay.present, vec!["neovim"]);
     }
 
     #[test]
@@ -135,7 +136,7 @@ mod tests {
         .unwrap();
 
         let loaded = Manifest::load(&path).unwrap();
-        assert!(loaded.apt.is_empty());
+        assert_eq!(loaded.apt.absent, vec!["neovim", "git"]);
     }
 
     fn tempdir() -> std::path::PathBuf {

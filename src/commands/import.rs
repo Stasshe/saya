@@ -27,7 +27,7 @@ pub fn run(
     let candidates: Vec<String> = backend
         .list_manually_installed()?
         .into_iter()
-        .filter(|name| !manifest.contains(name, backend.kind()))
+        .filter(|name| !manifest.is_managed(name, backend.kind()))
         .collect();
 
     if candidates.is_empty() {

@@ -5,7 +5,7 @@ use crate::manifest::validate_package_name;
 #[derive(Parser)]
 #[command(
     name = "saya",
-    about = "Thin one-way sync wrapper around your OS package manager",
+    about = "Thin declarative wrapper around your OS package manager",
     version,
     disable_version_flag = true
 )]
@@ -25,13 +25,12 @@ pub enum Command {
     Update,
     /// Upgrade installed packages with the detected OS package manager.
     Upgrade,
-    /// With no name: install every package listed in the manifest that
-    /// isn't installed yet. With a name: install that package and record
-    /// it in the manifest on success.
+    /// With no name: apply the manifest's present and absent states.
+    /// With names: install those packages and record them as present.
     Install(InstallArgs),
-    /// Show which manifest packages are installed/missing without installing.
+    /// Show manifest packages and whether their desired state is applied.
     Status,
-    /// Uninstall packages and remove them from the manifest.
+    /// Uninstall packages and record them as absent.
     Uninstall(UninstallArgs),
     /// List manually-installed packages not yet in the manifest.
     Import(ImportArgs),
@@ -43,7 +42,7 @@ pub struct InstallArgs {
     #[arg(short = 'y')]
     pub yes: bool,
     /// Package names as known to the detected backend, e.g. "neovim".
-    /// Omit to install everything missing from the manifest.
+    /// Omit to apply the manifest's present and absent states.
     #[arg(value_name = "PACKAGE", value_parser = parse_package_name)]
     pub names: Vec<String>,
     /// Arguments passed unchanged to apt-get or yay. Must follow `--`.
@@ -53,7 +52,7 @@ pub struct InstallArgs {
 
 #[derive(Args)]
 pub struct UninstallArgs {
-    /// Package names to uninstall and remove from the manifest.
+    /// Package names to uninstall and record as absent.
     #[arg(value_name = "PACKAGE", value_parser = parse_package_name, required = true)]
     pub names: Vec<String>,
 }

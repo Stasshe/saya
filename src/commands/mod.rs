@@ -17,6 +17,7 @@ pub fn manifest_path(home: &Path) -> PathBuf {
 /// it is currently installed.
 pub struct PackageStatus {
     pub name: String,
+    pub desired_present: bool,
     pub installed: bool,
 }
 
@@ -27,10 +28,18 @@ pub fn compute_status(
     manifest
         .names(backend.kind())
         .iter()
-        .map(|name| {
+        .map(|name| (name, true))
+        .chain(
+            manifest
+                .absent_names(backend.kind())
+                .iter()
+                .map(|name| (name, false)),
+        )
+        .map(|(name, desired_present)| {
             let installed = backend.is_installed(name)?;
             Ok(PackageStatus {
                 name: name.clone(),
+                desired_present,
                 installed,
             })
         })

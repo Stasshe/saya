@@ -10,7 +10,12 @@ pub fn run(manifest: &Manifest, backend: &dyn Backend) -> Result<()> {
         return Ok(());
     }
     for s in statuses {
-        let mark = if s.installed { "installed" } else { "missing" };
+        let mark = match (s.desired_present, s.installed) {
+            (true, true) => "installed",
+            (true, false) => "missing",
+            (false, true) => "pending removal",
+            (false, false) => "absent",
+        };
         println!("{:<24} {}", s.name, mark);
     }
     Ok(())

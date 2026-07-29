@@ -7,12 +7,13 @@ chezmoi(dotfiles管理)、mise(開発ツール管理)に対し、OSパッケー�
 sayaは大規模統合パッケージマネージャではなく、APT/yayに以下を足す。
 
 - **意図記録**: `saya install foo bar`でインストールに成功したパッケージをマニフェストへ記録する。
-- **一方向適用**: `saya install`(引数なし)でマニフェストにあって未インストールのものだけインストールする。
-- **明示的な削除**: `saya uninstall foo bar`でアンインストールし、マニフェストからも削除する。
+- **状態適用**: `saya install`(引数なし)で`present`の不足分を入れ、`absent`の導入済みパッケージを消す。
+- **明示的な削除**: `saya uninstall foo bar`でアンインストールし、削除意図を`absent`へ記録する。
 
 ## 設計判断
 
 - **明示的な install/uninstall**: apt/yay の shim や自動キャプチャは作らない。パッケージ追加・削除は `saya install <package>` / `saya uninstall <package>` で明示する。
+- **削除意図の永続化**: manifest未記載は管理対象外とし、OS標準パッケージを削除対象にしない。明示的にuninstallした名前だけを`absent`へ残し、別環境でも削除状態を再現する。不要になった意図はmanifestから手動で消す。
 - **install/addの統合**: 当初`saya add <package>`(install+記録)と`saya install`(一括反映)を別コマンドにしていたが、名前が近く役割も「install系」で揃うため統合した。npm(`npm install`=lockfile一括、`npm install <pkg...>`=追加)と同じ、引数の有無で挙動を切り替える形にした。`saya uninstall`は対称に見えるが「一括アンインストール」という概念が元々ないため、名前は常に必須。
 - **backend引数の境界**: `saya install <package...> -- <arg...>`の`--`以降は、解釈・保存せず検出中backendのinstallへ渡す。値を取るオプションとパッケージ名を推測で区別せず、任意のapt-get/yayオプションを扱える明示境界とする。
 - **非対話install**: installは常にAPTへ`-y`、yayへ`--noconfirm`を渡す。`saya install -y <package...>`も同じ非対話操作として受理する。
@@ -21,7 +22,7 @@ sayaは大規模統合パッケージマネージャではなく、APT/yayに以
 - **root書き込み回避**: rootでユーザーhome配下へmanifestを書かない。manifest保存前に元ユーザーへ権限を落としてから書き込む。
 - **Arch backend**: yayで公式リポジトリとAURを一括管理する。pacmanとのbackend分割はしない。`/usr/bin/yay`未導入時はエラーにする。
 - **マニフェスト書き込み**: `0644`で保存する。保存内容が既存ファイルと同一なら内容を書き換えず、権限のみ補正する。差分があれば同じディレクトリに一意なtmpファイルを排他的に作成し、`0644`へ変更して書き込みを同期してからrenameする。file lockingは作らない。
-- **backend間の論理名共有を撤廃**: Ubuntu/Arch間で共有できるpackage名が少ないため、apt/yayごとに独立したフラット配列を持つ。`saya install <name>`は検出中backendの配列へ名前をそのまま追加する。schema_versionは4とし、旧形式との後方互換・移行は作らない。
+- **backend間の論理名共有を撤廃**: Ubuntu/Arch間で共有できるpackage名が少ないため、apt/yayごとに独立した`present`/`absent`を持つ。package名は検出中backendへそのまま記録する。schema_versionは5とし、旧形式との後方互換・移行は作らない。
 
 ## アーキテクチャ概要
 
@@ -32,12 +33,12 @@ saya -v / --version        -> print the saya binary version
 saya self-update           -> update this binary from GitHub Releases
 saya update                -> update package manager metadata
 saya upgrade               -> upgrade installed packages through detected backend
-saya install                -> install missing manifest packages
+saya install                -> apply present/absent entries
 saya install <package...>   -> install through detected backend, then record
 saya install -y <package...> -> accept the familiar non-interactive form
 saya install <package...> -- <arg...> -> pass native install arguments through
 saya status                 -> show install status
-saya uninstall <package...> -> uninstall through detected backend, then remove from manifest
+saya uninstall <package...> -> uninstall through detected backend, then record absent
 saya import --manual        -> list or import manually-installed packages
 ```
 
@@ -76,13 +77,17 @@ saya/
 ```rust
 pub struct Manifest {
     pub schema_version: u32,
-    pub apt: Vec<String>,
-    pub yay: Vec<String>,
+    pub apt: PackageSet,
+    pub yay: PackageSet,
+}
+pub struct PackageSet {
+    pub present: Vec<String>,
+    pub absent: Vec<String>,
 }
 ```
 
 - `schema_version` はマニフェストファイル形式のバージョンで、saya本体のリリースバージョンではない。
-- `apt`/`yay` はそれぞれのbackendで使うパッケージ名をそのまま並べたフラットな配列。backend間の対応関係は持たない。
+- `apt`/`yay` はそれぞれ独立したbackend状態。`present`は導入意図、`absent`は削除意図。同じ名前を両方へ入れられず、どちらにもなければ管理対象外。
 - `Manifest::save(path)` はシリアライズ結果が既存内容と同一なら書き換えない。差分があれば同じディレクトリに一意なtmpファイルを排他的に作成し、書き込みを同期してから対象へrenameする。
 
 ### privilege.rs
@@ -116,35 +121,35 @@ pub trait Backend {
 
 ### commands/install.rs
 
-`saya install`(パッケージ引数なし)はmanifestの各エントリについて `is_installed` を確認し、未インストールの実パッケージ名だけをまとめて `install()` に渡す。`saya install <name...>`は検出中backendで全指定パッケージを一度にインストールし、コマンド全体の成功後に未記録名を配列へ追記する。全て記録済みならインストールだけ行いmanifestは保存しない。installは常に非対話で、`-y`指定も受理する。`--`以降の引数は両方の形式でbackendのinstall引数へ順序と値を変えずに渡し、manifestには記録しない。
+`saya install`(パッケージ引数なし)は検出中backendの`present`で未導入の名前をまとめて `install()` へ渡し、`absent`で導入済みの名前をまとめて`uninstall()`へ渡す。`saya install <name...>`は全指定パッケージを一度にインストールし、成功後に`present`へ記録して同名を`absent`から除く。状態が変わらなければmanifestは保存しない。installは常に非対話で、`-y`指定も受理する。`--`以降の引数はinstall時だけbackendへ順序と値を変えずに渡し、manifestには記録しない。
 
 ### commands/uninstall.rs
 
-`saya uninstall <name...>` はmanifestへの記録や事前のインストール判定にかかわらず、全指定パッケージを検出中backendで一度にアンインストールしてからmanifestの該当配列から削除する。APT backendは対象を`apt-get remove --purge`で削除後、`apt-get autoremove --purge`で不要な依存パッケージも削除する。yay backendは`yay -Rns`を使う。
+`saya uninstall <name...>` はmanifestへの記録や事前のインストール判定にかかわらず、全指定パッケージを検出中backendで一度にアンインストールする。成功後に`present`から除いて`absent`へ記録する。APT backendは対象を`apt-get remove --purge`で削除後、`apt-get autoremove --purge`で不要な依存パッケージも削除する。yay backendは`yay -Rns`を使う。
 
 ### commands/status.rs
 
-manifest と現在のインストール状態を表示する。インストールはしない。
+検出中backendの`present`/`absent`と現在のインストール状態を表示する。変更はしない。
 
 ### commands/import.rs
 
-`list_manually_installed` から未収録分を一覧する。`--edit` の場合だけエディタで候補を編集してmanifestへ取り込む。
+`list_manually_installed` から`present`/`absent`のどちらにもない未管理分を一覧する。`--edit` の場合だけエディタで候補を編集して`present`へ取り込む。
 
 ## 検証方法
 
 **自動(cargo test、root不要)**:
 
-- manifest の load/save、名前解決、既存記録判定
+- manifest の load/save、present/absent排他、既存記録判定
 - distro backend 判定
 - apt manual list パース
 - privilege の passwd lookup
-- install command(複数指定/manifest一括)の成功時記録・未導入パッケージ抽出・`-y`・backend引数境界
-- uninstall command の複数指定・常時backend実行・manifest削除
+- install command(複数指定/manifest適用)の成功時記録・導入/削除対象抽出・`-y`・backend引数境界
+- uninstall command の複数指定・常時backend実行・absent記録
 - manifest保存内容が同一の場合の無変更
 
 **手動確認が必要**:
 
-- APT実機での `saya install <package...>` / `saya install` / install引数透過 / `saya uninstall <package>`
+- APT実機での `saya install <package...>` / present・absent適用 / install引数透過 / `saya uninstall <package...>`
 - yayのinstall/update/upgrade/uninstallによる実機変更
 
 ## YAGNI

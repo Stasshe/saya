@@ -6,4 +6,4 @@ Archではyayが公式リポジトリとAURを同じ操作で扱い、インス�
 
 ## Intent
 
-Debian系はAPT、Arch系はyayへ一意に決定する。Archの公式packageとAUR packageは区別せず`yay`配列へ記録する。yayは一般ユーザーとして直接起動し、権限が必要な処理はyay自身へ委ねる。yay未導入とroot実行はerrorにする。
+Debian系はAPT、Arch系はyayへ一意に決定する。Archの公式packageとAUR packageは区別せず`yay`の状態へ記録する。yayは一般ユーザーとして直接起動し、権限が必要な処理はyay自身へ委ねる。yay未導入とroot実行はerrorにする。

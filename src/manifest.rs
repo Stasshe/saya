@@ -10,24 +10,31 @@ use serde::{Deserialize, Serialize};
 
 use crate::backend::BackendKind;
 
-pub const CURRENT_SCHEMA_VERSION: u32 = 4;
+pub const CURRENT_SCHEMA_VERSION: u32 = 5;
+
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageSet {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub present: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub absent: Vec<String>,
+}
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub schema_version: u32,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub apt: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub yay: Vec<String>,
+    pub apt: PackageSet,
+    pub yay: PackageSet,
 }
 
 impl Default for Manifest {
     fn default() -> Self {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
-            apt: Vec::new(),
-            yay: Vec::new(),
+            apt: PackageSet::default(),
+            yay: PackageSet::default(),
         }
     }
 }
@@ -78,13 +85,21 @@ impl Manifest {
     }
 
     pub fn names(&self, kind: BackendKind) -> &[String] {
+        &self.packages(kind).present
+    }
+
+    pub fn absent_names(&self, kind: BackendKind) -> &[String] {
+        &self.packages(kind).absent
+    }
+
+    fn packages(&self, kind: BackendKind) -> &PackageSet {
         match kind {
             BackendKind::Apt => &self.apt,
             BackendKind::Yay => &self.yay,
         }
     }
 
-    fn names_mut(&mut self, kind: BackendKind) -> &mut Vec<String> {
+    fn packages_mut(&mut self, kind: BackendKind) -> &mut PackageSet {
         match kind {
             BackendKind::Apt => &mut self.apt,
             BackendKind::Yay => &mut self.yay,
@@ -95,21 +110,32 @@ impl Manifest {
         self.names(kind).iter().any(|n| n == name)
     }
 
-    /// Appends `name` to `kind`'s list. No-op if already present.
+    pub fn is_absent(&self, name: &str, kind: BackendKind) -> bool {
+        self.absent_names(kind).iter().any(|n| n == name)
+    }
+
+    pub fn is_managed(&self, name: &str, kind: BackendKind) -> bool {
+        self.contains(name, kind) || self.is_absent(name, kind)
+    }
+
+    /// Records `name` as desired present and clears any desired-absent record.
     pub fn record(&mut self, name: &str, kind: BackendKind) {
         debug_assert!(validate_package_name(name).is_ok());
-        let names = self.names_mut(kind);
-        if !names.iter().any(|n| n == name) {
-            names.push(name.to_string());
+        let packages = self.packages_mut(kind);
+        packages.absent.retain(|n| n != name);
+        if !packages.present.iter().any(|n| n == name) {
+            packages.present.push(name.to_string());
         }
     }
 
-    /// Removes `name` from `kind`'s list. Returns whether it was present.
-    pub fn remove(&mut self, name: &str, kind: BackendKind) -> bool {
-        let names = self.names_mut(kind);
-        let len_before = names.len();
-        names.retain(|n| n != name);
-        names.len() != len_before
+    /// Records `name` as desired absent and clears any desired-present record.
+    pub fn record_absent(&mut self, name: &str, kind: BackendKind) {
+        debug_assert!(validate_package_name(name).is_ok());
+        let packages = self.packages_mut(kind);
+        packages.present.retain(|n| n != name);
+        if !packages.absent.iter().any(|n| n == name) {
+            packages.absent.push(name.to_string());
+        }
     }
 
     fn validate(&self) -> Result<()> {
@@ -121,10 +147,19 @@ impl Manifest {
             );
         }
 
-        for name in self.apt.iter().chain(self.yay.iter()) {
-            validate_package_name(name)
-                .map_err(anyhow::Error::msg)
-                .with_context(|| format!("invalid package name {name:?}"))?;
+        for packages in [&self.apt, &self.yay] {
+            for name in packages.present.iter().chain(&packages.absent) {
+                validate_package_name(name)
+                    .map_err(anyhow::Error::msg)
+                    .with_context(|| format!("invalid package name {name:?}"))?;
+            }
+            if let Some(name) = packages
+                .present
+                .iter()
+                .find(|name| packages.absent.contains(name))
+            {
+                anyhow::bail!("package {name:?} cannot be both present and absent");
+            }
         }
         Ok(())
     }
@@ -215,6 +250,9 @@ mod tests {
 
         let loaded = Manifest::load(&path).unwrap();
         assert_eq!(loaded, manifest);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("[apt]\npresent = [\"git\"]"));
+        assert!(text.contains("[yay]\npresent = [\"neovim\"]"));
         assert_eq!(std::fs::metadata(&path).unwrap().mode() & 0o777, 0o644);
         assert!(!path.with_extension("tmp").exists());
     }
@@ -256,7 +294,7 @@ mod tests {
         let mut manifest = Manifest::default();
         manifest.record("git", BackendKind::Apt);
         manifest.record("git", BackendKind::Apt);
-        assert_eq!(manifest.apt, vec!["git".to_string()]);
+        assert_eq!(manifest.apt.present, vec!["git".to_string()]);
     }
 
     #[test]
@@ -268,27 +306,49 @@ mod tests {
     }
 
     #[test]
-    fn remove_removes_only_from_matching_backend() {
+    fn recording_absent_removes_present_from_matching_backend_only() {
         let mut manifest = Manifest::default();
         manifest.record("neovim", BackendKind::Apt);
         manifest.record("neovim", BackendKind::Yay);
 
-        assert!(manifest.remove("neovim", BackendKind::Apt));
+        manifest.record_absent("neovim", BackendKind::Apt);
+
         assert!(!manifest.contains("neovim", BackendKind::Apt));
+        assert!(manifest.is_managed("neovim", BackendKind::Apt));
+        assert_eq!(manifest.apt.absent, vec!["neovim"]);
         assert!(manifest.contains("neovim", BackendKind::Yay));
     }
 
     #[test]
-    fn remove_returns_false_when_absent() {
+    fn recording_present_clears_absent() {
         let mut manifest = Manifest::default();
-        assert!(!manifest.remove("neovim", BackendKind::Apt));
+        manifest.record_absent("neovim", BackendKind::Apt);
+
+        manifest.record("neovim", BackendKind::Apt);
+
+        assert_eq!(manifest.apt.present, vec!["neovim"]);
+        assert!(manifest.apt.absent.is_empty());
+    }
+
+    #[test]
+    fn load_rejects_package_in_present_and_absent() {
+        let dir = tempdir();
+        let path = dir.join("packages.toml");
+        std::fs::write(
+            &path,
+            "schema_version = 5\n[apt]\npresent = [\"git\"]\nabsent = [\"git\"]\n[yay]\n",
+        )
+        .unwrap();
+
+        let err = Manifest::load(&path).unwrap_err().to_string();
+        assert!(err.contains("validating manifest"));
     }
 
     #[test]
     fn load_rejects_unsupported_manifest_version() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
-        std::fs::write(&path, "schema_version = 999\n").unwrap();
+        std::fs::write(&path, "schema_version = 999\n[apt]\n[yay]\n").unwrap();
 
         let err = Manifest::load(&path).unwrap_err().to_string();
         assert!(err.contains("validating manifest"));
@@ -307,7 +367,11 @@ mod tests {
     fn load_rejects_pacman_manifest() {
         let dir = tempdir();
         let path = dir.join("packages.toml");
-        std::fs::write(&path, "schema_version = 4\npacman = [\"git\"]\n").unwrap();
+        std::fs::write(
+            &path,
+            "schema_version = 5\n[apt]\n[yay]\n[pacman]\npresent = [\"git\"]\n",
+        )
+        .unwrap();
 
         assert!(Manifest::load(&path).is_err());
     }
